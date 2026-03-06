@@ -1020,7 +1020,8 @@ function resetDecksToBuiltIn() {
   state.deckSource.image = "built-in";
   persistCustomDecks();
   renderDeckStatus();
-  setSummary("已恢复内置图卡和字卡。", false);
+  setSummary("已恢复内置图卡和字卡，正在尝试自动加载实卡素材。", false);
+  autoLoadBundledDecks();
 }
 
 function hydrateCustomDecks() {
