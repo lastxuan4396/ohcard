@@ -23,6 +23,12 @@
 - `data/image-deck-template.json`: 图卡导入模板
 
 ## 导入真实 OH 图卡 / 字卡
+项目启动时会优先自动加载：
+- `data/oh-image-deck.json`
+- `data/oh-word-deck.json`
+
+如果你手动点击导入，导入内容会覆盖自动加载结果并保存在浏览器本地。
+
 1. 先准备 JSON 文件（可复制 `data/` 下模板修改）
 2. 页面中点击：
    - `导入图卡 JSON`

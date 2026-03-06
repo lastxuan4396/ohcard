@@ -233,6 +233,8 @@ const DEFAULT_IMAGE_DECK = IMAGE_SCENE_POOL.map((scene) => normalizeImageCard({
 
 const STORAGE_KEY = "oh-card-lab-history-v1";
 const CUSTOM_DECK_STORAGE_KEY = "oh-card-custom-decks-v1";
+const BUNDLED_IMAGE_DECK_PATH = "./data/oh-image-deck.json";
+const BUNDLED_WORD_DECK_PATH = "./data/oh-word-deck.json";
 
 const refs = {
   questionInput: document.getElementById("questionInput"),
@@ -308,6 +310,7 @@ function init() {
   setSummary("已启用图卡 + 字卡玩法。你可以直接抽，也可以先导入自己的卡组。", false);
   bindEvents();
   updateTimerDisplay();
+  autoLoadBundledDecks();
 }
 
 function bindEvents() {
@@ -413,8 +416,13 @@ function renderLayoutDirectionSwitch() {
 }
 
 function renderDeckStatus() {
-  const wordSource = state.deckSource.word === "custom" ? "已导入" : "内置";
-  const imageSource = state.deckSource.image === "custom" ? "已导入" : "内置";
+  const sourceLabel = {
+    custom: "已导入",
+    bundled: "实卡包",
+    "built-in": "内置"
+  };
+  const wordSource = sourceLabel[state.deckSource.word] || "内置";
+  const imageSource = sourceLabel[state.deckSource.image] || "内置";
   refs.deckStatus.textContent = `字卡 ${state.wordDeck.length} 张（${wordSource}） / 图卡 ${state.imageDeck.length} 张（${imageSource}）`;
 }
 
@@ -1043,6 +1051,46 @@ function hydrateCustomDecks() {
     }
   } catch (error) {
     console.error("hydrate custom decks failed", error);
+  }
+}
+
+async function autoLoadBundledDecks() {
+  if (state.deckSource.word === "custom" || state.deckSource.image === "custom") {
+    return;
+  }
+
+  try {
+    const [imageRes, wordRes] = await Promise.all([fetch(BUNDLED_IMAGE_DECK_PATH), fetch(BUNDLED_WORD_DECK_PATH)]);
+    if (!imageRes.ok || !wordRes.ok) {
+      return;
+    }
+
+    const [imageRaw, wordRaw] = await Promise.all([imageRes.json(), wordRes.json()]);
+    const imageDeck = Array.isArray(imageRaw) ? imageRaw.map((entry) => normalizeImageCard(entry)).filter(Boolean) : [];
+    const wordDeck = Array.isArray(wordRaw) ? wordRaw.map((entry) => normalizeWordCard(entry)).filter(Boolean) : [];
+
+    let changed = false;
+
+    if (imageDeck.length >= 5) {
+      state.imageDeck = imageDeck;
+      state.deckSource.image = "bundled";
+      changed = true;
+    }
+
+    if (wordDeck.length >= 5) {
+      state.wordDeck = wordDeck;
+      state.deckSource.word = "bundled";
+      changed = true;
+    }
+
+    if (!changed) {
+      return;
+    }
+
+    renderDeckStatus();
+    setSummary(`已自动加载实卡素材：图卡 ${state.imageDeck.length} 张 / 字卡 ${state.wordDeck.length} 张。`, false);
+  } catch (error) {
+    console.warn("autoLoadBundledDecks failed", error);
   }
 }
 
