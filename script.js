@@ -89,6 +89,17 @@ const DECK_TYPES = {
   }
 };
 
+const LAYOUT_DIRECTIONS = {
+  horizontal: {
+    name: "横向",
+    desc: "牌阵横向展开"
+  },
+  vertical: {
+    name: "纵向",
+    desc: "牌阵纵向阅读"
+  }
+};
+
 const PROMPT_LAYERS = [
   {
     id: "description",
@@ -228,6 +239,7 @@ const refs = {
   modeBadge: document.getElementById("modeBadge"),
   modeSwitch: document.getElementById("modeSwitch"),
   deckTypeSwitch: document.getElementById("deckTypeSwitch"),
+  layoutDirectionSwitch: document.getElementById("layoutDirectionSwitch"),
   deckStatus: document.getElementById("deckStatus"),
   importImageDeckBtn: document.getElementById("importImageDeckBtn"),
   importWordDeckBtn: document.getElementById("importWordDeckBtn"),
@@ -260,6 +272,7 @@ const refs = {
 const state = {
   modeId: "focus",
   deckTypeId: "pair",
+  layoutDirection: "horizontal",
   layerId: "description",
   drawVersion: 0,
   isDrawing: false,
@@ -287,6 +300,7 @@ function init() {
   renderModeSwitch();
   renderModeDetail();
   renderDeckTypeSwitch();
+  renderLayoutDirectionSwitch();
   renderDeckStatus();
   renderPromptTabs();
   renderPlaybook();
@@ -311,6 +325,14 @@ function bindEvents() {
       return;
     }
     setDeckType(button.dataset.deckType);
+  });
+
+  refs.layoutDirectionSwitch.addEventListener("click", (event) => {
+    const button = event.target.closest("button[data-layout-direction]");
+    if (!button) {
+      return;
+    }
+    setLayoutDirection(button.dataset.layoutDirection);
   });
 
   refs.promptTabs.addEventListener("click", (event) => {
@@ -363,7 +385,7 @@ function renderModeSwitch() {
     button.innerHTML = `<strong>${mode.name}</strong><span>${mode.description}</span>`;
     refs.modeSwitch.appendChild(button);
   });
-  refs.modeBadge.textContent = `${MODES[state.modeId].badge} / ${DECK_TYPES[state.deckTypeId].name}`;
+  refs.modeBadge.textContent = `${MODES[state.modeId].badge} / ${DECK_TYPES[state.deckTypeId].name} / ${LAYOUT_DIRECTIONS[state.layoutDirection].name}`;
 }
 
 function renderDeckTypeSwitch() {
@@ -375,6 +397,18 @@ function renderDeckTypeSwitch() {
     button.dataset.deckType = deckTypeId;
     button.innerHTML = `<strong>${deckType.name}</strong><span>${deckType.desc}</span>`;
     refs.deckTypeSwitch.appendChild(button);
+  });
+}
+
+function renderLayoutDirectionSwitch() {
+  refs.layoutDirectionSwitch.innerHTML = "";
+  Object.entries(LAYOUT_DIRECTIONS).forEach(([directionId, direction]) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = `direction-btn ${directionId === state.layoutDirection ? "active" : ""}`;
+    button.dataset.layoutDirection = directionId;
+    button.innerHTML = `<strong>${direction.name}</strong><span>${direction.desc}</span>`;
+    refs.layoutDirectionSwitch.appendChild(button);
   });
 }
 
@@ -467,6 +501,7 @@ function runDraw() {
       time: new Date().toISOString(),
       modeId: state.modeId,
       deckTypeId: state.deckTypeId,
+      layoutDirection: state.layoutDirection,
       question: refs.questionInput.value.trim(),
       cards,
       note: ""
@@ -530,7 +565,9 @@ function drawCards(count) {
 
 function renderSpread(cards, slotLabels) {
   refs.spreadBoard.className = "spread-board";
-  refs.spreadBoard.classList.add(`cols-${Math.min(cards.length, 5)}`);
+  refs.spreadBoard.classList.add(`direction-${state.layoutDirection}`);
+  const cols = state.layoutDirection === "vertical" ? 1 : Math.min(cards.length, 5);
+  refs.spreadBoard.classList.add(`cols-${cols}`);
   refs.spreadBoard.innerHTML = "";
 
   cards.forEach((card, index) => {
@@ -570,7 +607,7 @@ function fillCardFront(front, card, slotLabel) {
     pairTitle.textContent = `${card.imageCard.name} + ${card.wordCard.name}`;
 
     const pairWrap = document.createElement("div");
-    pairWrap.className = "pair-wrap";
+    pairWrap.className = `pair-wrap direction-${state.layoutDirection}`;
 
     const imageBlock = document.createElement("div");
     imageBlock.className = "image-block";
@@ -723,6 +760,7 @@ function renderHistory() {
     item.className = "history-item";
     const mode = MODES[session.modeId];
     const deckType = DECK_TYPES[session.deckTypeId] || DECK_TYPES[inferDeckTypeFromCards(session.cards)] || DECK_TYPES.word;
+    const layoutDirection = LAYOUT_DIRECTIONS[session.layoutDirection] || LAYOUT_DIRECTIONS.horizontal;
 
     const time = new Date(session.time);
     const localTime = `${time.getFullYear()}-${pad2(time.getMonth() + 1)}-${pad2(time.getDate())} ${pad2(
@@ -730,7 +768,7 @@ function renderHistory() {
     )}:${pad2(time.getMinutes())}`;
 
     item.innerHTML = `
-      <strong>${escapeHTML(mode ? mode.name : "未知玩法")} · ${escapeHTML(deckType.name)} · ${escapeHTML(localTime)}</strong>
+      <strong>${escapeHTML(mode ? mode.name : "未知玩法")} · ${escapeHTML(deckType.name)} · ${escapeHTML(layoutDirection.name)} · ${escapeHTML(localTime)}</strong>
       <p>问题：${escapeHTML(session.question || "（未填写）")}</p>
       <p>牌面：${escapeHTML((session.cards || []).map((card) => getCardShortName(card)).join(" / "))}</p>
       <p>笔记：${escapeHTML(session.note || "（未记录）")}</p>
@@ -765,6 +803,7 @@ function handleHistoryAction(event) {
     }
     state.modeId = session.modeId in MODES ? session.modeId : "focus";
     state.deckTypeId = session.deckTypeId in DECK_TYPES ? session.deckTypeId : inferDeckTypeFromCards(session.cards);
+    state.layoutDirection = session.layoutDirection in LAYOUT_DIRECTIONS ? session.layoutDirection : "horizontal";
     state.currentSession = session;
     state.currentCards = session.cards || [];
     state.layerId = "description";
@@ -773,10 +812,14 @@ function handleHistoryAction(event) {
     renderModeSwitch();
     renderModeDetail();
     renderDeckTypeSwitch();
+    renderLayoutDirectionSwitch();
     renderPromptTabs();
     renderSpread(state.currentCards, MODES[state.modeId].labels);
     renderPrompts();
-    setSummary(`已回看历史：${MODES[state.modeId].name} / ${DECK_TYPES[state.deckTypeId].name}`, false);
+    setSummary(
+      `已回看历史：${MODES[state.modeId].name} / ${DECK_TYPES[state.deckTypeId].name} / ${LAYOUT_DIRECTIONS[state.layoutDirection].name}`,
+      false
+    );
   }
 }
 
@@ -810,6 +853,7 @@ async function copyCurrentReport() {
     `问题：${refs.questionInput.value.trim() || "（未填写）"}`,
     `玩法：${mode.name}`,
     `卡组：${DECK_TYPES[state.deckTypeId].name}`,
+    `方向：${LAYOUT_DIRECTIONS[state.layoutDirection].name}`,
     "牌面：",
     ...state.currentCards.map((card, index) => formatCardLineForReport(card, mode.labels[index] || `位置 ${index + 1}`)),
     `当前提问层：${PROMPT_LAYERS.find((layer) => layer.id === state.layerId)?.name || ""}`,
@@ -894,6 +938,34 @@ function setDeckType(deckTypeId) {
   }
 
   setSummary(`已切换卡组：${DECK_TYPES[deckTypeId].name}`, false);
+}
+
+function setLayoutDirection(directionId) {
+  if (!(directionId in LAYOUT_DIRECTIONS)) {
+    return;
+  }
+  state.layoutDirection = directionId;
+  renderModeSwitch();
+  renderLayoutDirectionSwitch();
+
+  if (state.currentSession) {
+    state.currentSession.layoutDirection = directionId;
+    state.history = state.history.map((entry) => {
+      if (entry.id === state.currentSession.id) {
+        return { ...entry, layoutDirection: directionId };
+      }
+      return entry;
+    });
+    persistHistory();
+    renderHistory();
+  }
+
+  if (state.currentCards.length > 0) {
+    renderSpread(state.currentCards, MODES[state.modeId].labels);
+    renderPrompts();
+  }
+
+  setSummary(`已切换方向：${LAYOUT_DIRECTIONS[directionId].name}`, false);
 }
 
 async function importDeckFromFile(file, type) {
