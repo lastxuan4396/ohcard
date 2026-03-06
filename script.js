@@ -74,6 +74,21 @@ const MODES = {
   }
 };
 
+const DECK_TYPES = {
+  pair: {
+    name: "图字配对",
+    desc: "每个位置抽 1 张图卡 + 1 张字卡"
+  },
+  image: {
+    name: "图卡模式",
+    desc: "只抽图卡，强化画面联想"
+  },
+  word: {
+    name: "字卡模式",
+    desc: "只抽字卡，强化语义触发"
+  }
+};
+
 const PROMPT_LAYERS = [
   {
     id: "description",
@@ -116,7 +131,7 @@ const PROMPT_POOL = {
   ]
 };
 
-const CARD_POOL = [
+const DEFAULT_WORD_DECK = [
   { name: "钥匙", glyph: "✦", tone: "sand", keywords: ["开启", "机会", "方法"], cue: "眼前某扇门需要主动试探，而不是等待许可。" },
   { name: "桥", glyph: "▤", tone: "ocean", keywords: ["连接", "过渡", "对话"], cue: "两端都存在价值，重点是如何搭建可通行的路径。" },
   { name: "门", glyph: "▣", tone: "sand", keywords: ["边界", "进出", "抉择"], cue: "不是所有门都要进，关键是你要对入口负责。" },
@@ -168,14 +183,57 @@ const CARD_POOL = [
   { name: "拼图", glyph: "▱", tone: "sand", keywords: ["整合", "碎片", "全局"], cue: "缺失的一块会在行动中出现，不只在思考里出现。" },
   { name: "天秤", glyph: "⚖", tone: "night", keywords: ["平衡", "判断", "取舍"], cue: "你可以接受权衡，而不是追求完美兼得。" },
   { name: "钥匙孔", glyph: "◌", tone: "fire", keywords: ["入口", "视角", "专注"], cue: "先从一个小入口切入，局面就会开始松动。" }
+].map((card) => normalizeWordCard(card));
+
+const IMAGE_SCENE_POOL = [
+  { name: "清晨窗台", tone: "sand", symbol: "□", colors: ["#efd8ad", "#f9f3e8", "#d69f64"], keywords: ["安静", "观察"], cue: "也许你只需要静下来观察，而不是立刻定论。" },
+  { name: "雨中街口", tone: "ocean", symbol: "◇", colors: ["#87b7c5", "#d7ebf1", "#4f7994"], keywords: ["流动", "选择"], cue: "你站在岔路口，先判断方向再迈步会更稳。" },
+  { name: "夜色楼梯", tone: "night", symbol: "△", colors: ["#7f879f", "#d7dae6", "#4e5568"], keywords: ["进阶", "过程"], cue: "黑暗里也有台阶，重点是一步一步向上。" },
+  { name: "旧港船坞", tone: "ocean", symbol: "◌", colors: ["#82a7a3", "#d5ebe8", "#436d67"], keywords: ["停靠", "启航"], cue: "你可以先停靠整顿，再出发不迟。" },
+  { name: "黄昏山坡", tone: "sand", symbol: "▲", colors: ["#e5b880", "#f7e2c7", "#ac7441"], keywords: ["视野", "目标"], cue: "把目光放远，眼前阻力就不再是全部。" },
+  { name: "镜湖倒影", tone: "ocean", symbol: "◎", colors: ["#79adb5", "#def0f2", "#4f7f84"], keywords: ["投射", "自我"], cue: "你看到的画面，也许是内心的倒影。" },
+  { name: "荒野灯塔", tone: "fire", symbol: "✶", colors: ["#edb180", "#ffe8d1", "#c37740"], keywords: ["信号", "方向"], cue: "先点亮一盏灯，你就有了方向锚点。" },
+  { name: "古桥薄雾", tone: "night", symbol: "⊓", colors: ["#9b9fa9", "#e8eaef", "#6f7480"], keywords: ["连接", "过渡"], cue: "你正在过桥，别把雾当成终点。" },
+  { name: "林间小径", tone: "moss", symbol: "≈", colors: ["#8ab082", "#e2f0de", "#5f8157"], keywords: ["探索", "弹性"], cue: "路未必一开始就清晰，走着走着才会显现。" },
+  { name: "旧城广场", tone: "sand", symbol: "▦", colors: ["#d7b093", "#f7eadd", "#986e4e"], keywords: ["关系", "互动"], cue: "问题常发生在人与人的互动结构里。" },
+  { name: "沙丘风线", tone: "sand", symbol: "⋯", colors: ["#ebc48f", "#fbeedb", "#bd8d4f"], keywords: ["时间", "痕迹"], cue: "时间会留下纹理，你需要读取这些变化。" },
+  { name: "晨雾花园", tone: "moss", symbol: "✿", colors: ["#a4c895", "#edf5e8", "#6f9961"], keywords: ["滋养", "长期"], cue: "长期被滋养的关系，会慢慢开花。" },
+  { name: "深夜车站", tone: "night", symbol: "⧉", colors: ["#8a93ac", "#e3e6f2", "#5b6177"], keywords: ["等待", "转场"], cue: "等待不是停滞，可能是在换乘。" },
+  { name: "风中高塔", tone: "fire", symbol: "✧", colors: ["#e6aa75", "#fce8d6", "#af6734"], keywords: ["稳定", "适应"], cue: "稳定不是不动，而是能在风中调整。" },
+  { name: "午后河岸", tone: "ocean", symbol: "∿", colors: ["#86b7b1", "#dff1ee", "#588b85"], keywords: ["顺势", "变化"], cue: "与其对抗流向，不如找到顺势路线。" },
+  { name: "云上观景", tone: "ocean", symbol: "☁", colors: ["#98bed0", "#eaf3f9", "#5f87a4"], keywords: ["远景", "抽离"], cue: "拉高视角后，细节会重新排列。" },
+  { name: "舞台幕布", tone: "fire", symbol: "▵", colors: ["#e89f82", "#fde7dd", "#bf6140"], keywords: ["表达", "看见"], cue: "你可以尝试更真实地表达，而不是只演角色。" },
+  { name: "断崖回声", tone: "night", symbol: "◢", colors: ["#8e9099", "#e5e6ea", "#5f626d"], keywords: ["边界", "风险"], cue: "先确认边界，再做跃迁。" },
+  { name: "曙光平原", tone: "moss", symbol: "✺", colors: ["#b3cb95", "#f0f7e7", "#7a9861"], keywords: ["希望", "起点"], cue: "再小的光，也可以成为重新开始的信号。" },
+  { name: "旧书房间", tone: "sand", symbol: "▤", colors: ["#dcb28d", "#f8e8db", "#9e6f4f"], keywords: ["记忆", "整理"], cue: "过去的经验需要被重新整理，而不是堆积。" },
+  { name: "海边栈桥", tone: "ocean", symbol: "⛶", colors: ["#78a8bf", "#dcebf3", "#4f7489"], keywords: ["连接", "选择"], cue: "选择不是对错，而是你愿意走哪段栈桥。" },
+  { name: "森林转角", tone: "moss", symbol: "⤳", colors: ["#95bc8d", "#e7f2e3", "#678d5f"], keywords: ["线索", "转机"], cue: "转角处未必是终点，也可能是转机。" },
+  { name: "微光隧道", tone: "night", symbol: "◉", colors: ["#8891ab", "#dfe2ee", "#5a6278"], keywords: ["未知", "勇气"], cue: "看不到全貌时，先走向微光。" },
+  { name: "风筝草地", tone: "fire", symbol: "◬", colors: ["#e5b07f", "#fae8d8", "#b97943"], keywords: ["自由", "牵引"], cue: "自由和牵引不是对立，可以同时存在。" }
 ];
 
+const DEFAULT_IMAGE_DECK = IMAGE_SCENE_POOL.map((scene) => normalizeImageCard({
+  name: scene.name,
+  tone: scene.tone,
+  keywords: scene.keywords,
+  cue: scene.cue,
+  image: buildSceneImage(scene)
+}));
+
 const STORAGE_KEY = "oh-card-lab-history-v1";
+const CUSTOM_DECK_STORAGE_KEY = "oh-card-custom-decks-v1";
 
 const refs = {
   questionInput: document.getElementById("questionInput"),
   modeBadge: document.getElementById("modeBadge"),
   modeSwitch: document.getElementById("modeSwitch"),
+  deckTypeSwitch: document.getElementById("deckTypeSwitch"),
+  deckStatus: document.getElementById("deckStatus"),
+  importImageDeckBtn: document.getElementById("importImageDeckBtn"),
+  importWordDeckBtn: document.getElementById("importWordDeckBtn"),
+  importImageDeckInput: document.getElementById("importImageDeckInput"),
+  importWordDeckInput: document.getElementById("importWordDeckInput"),
+  resetDeckBtn: document.getElementById("resetDeckBtn"),
   drawBtn: document.getElementById("drawBtn"),
   reshuffleBtn: document.getElementById("reshuffleBtn"),
   deck: document.getElementById("deck"),
@@ -201,12 +259,19 @@ const refs = {
 
 const state = {
   modeId: "focus",
+  deckTypeId: "pair",
   layerId: "description",
   drawVersion: 0,
   isDrawing: false,
   currentCards: [],
   currentSession: null,
   history: loadHistory(),
+  wordDeck: cloneCards(DEFAULT_WORD_DECK),
+  imageDeck: cloneCards(DEFAULT_IMAGE_DECK),
+  deckSource: {
+    word: "built-in",
+    image: "built-in"
+  },
   timer: {
     duration: 180,
     remaining: 180,
@@ -218,12 +283,15 @@ const state = {
 init();
 
 function init() {
+  hydrateCustomDecks();
   renderModeSwitch();
   renderModeDetail();
+  renderDeckTypeSwitch();
+  renderDeckStatus();
   renderPromptTabs();
   renderPlaybook();
   renderHistory();
-  setSummary("选择玩法并开始抽卡，你会看到对应牌阵和分层引导问题。");
+  setSummary("已启用图卡 + 字卡玩法。你可以直接抽，也可以先导入自己的卡组。", false);
   bindEvents();
   updateTimerDisplay();
 }
@@ -235,6 +303,14 @@ function bindEvents() {
       return;
     }
     setMode(button.dataset.mode);
+  });
+
+  refs.deckTypeSwitch.addEventListener("click", (event) => {
+    const button = event.target.closest("button[data-deck-type]");
+    if (!button) {
+      return;
+    }
+    setDeckType(button.dataset.deckType);
   });
 
   refs.promptTabs.addEventListener("click", (event) => {
@@ -259,6 +335,22 @@ function bindEvents() {
   refs.historyList.addEventListener("click", handleHistoryAction);
   refs.deck.addEventListener("click", runDraw);
   refs.timerToggle.addEventListener("click", toggleTimer);
+
+  refs.importImageDeckBtn.addEventListener("click", () => {
+    refs.importImageDeckInput.click();
+  });
+  refs.importWordDeckBtn.addEventListener("click", () => {
+    refs.importWordDeckInput.click();
+  });
+  refs.importImageDeckInput.addEventListener("change", (event) => {
+    importDeckFromFile(event.target.files[0], "image");
+    event.target.value = "";
+  });
+  refs.importWordDeckInput.addEventListener("change", (event) => {
+    importDeckFromFile(event.target.files[0], "word");
+    event.target.value = "";
+  });
+  refs.resetDeckBtn.addEventListener("click", resetDecksToBuiltIn);
 }
 
 function renderModeSwitch() {
@@ -271,7 +363,25 @@ function renderModeSwitch() {
     button.innerHTML = `<strong>${mode.name}</strong><span>${mode.description}</span>`;
     refs.modeSwitch.appendChild(button);
   });
-  refs.modeBadge.textContent = MODES[state.modeId].badge;
+  refs.modeBadge.textContent = `${MODES[state.modeId].badge} / ${DECK_TYPES[state.deckTypeId].name}`;
+}
+
+function renderDeckTypeSwitch() {
+  refs.deckTypeSwitch.innerHTML = "";
+  Object.entries(DECK_TYPES).forEach(([deckTypeId, deckType]) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = `deck-type-btn ${deckTypeId === state.deckTypeId ? "active" : ""}`;
+    button.dataset.deckType = deckTypeId;
+    button.innerHTML = `<strong>${deckType.name}</strong><span>${deckType.desc}</span>`;
+    refs.deckTypeSwitch.appendChild(button);
+  });
+}
+
+function renderDeckStatus() {
+  const wordSource = state.deckSource.word === "custom" ? "已导入" : "内置";
+  const imageSource = state.deckSource.image === "custom" ? "已导入" : "内置";
+  refs.deckStatus.textContent = `字卡 ${state.wordDeck.length} 张（${wordSource}） / 图卡 ${state.imageDeck.length} 张（${imageSource}）`;
 }
 
 function renderModeDetail() {
@@ -325,8 +435,13 @@ function runDraw() {
   if (state.isDrawing) {
     return;
   }
+
   const mode = MODES[state.modeId];
-  const cards = pickCards(mode.count);
+  if (!ensureDeckReady(mode.count)) {
+    return;
+  }
+
+  const cards = drawCards(mode.count);
   const drawToken = Date.now();
   state.drawVersion = drawToken;
   state.isDrawing = true;
@@ -351,6 +466,7 @@ function runDraw() {
       id: `${Date.now()}-${Math.random().toString(16).slice(2, 8)}`,
       time: new Date().toISOString(),
       modeId: state.modeId,
+      deckTypeId: state.deckTypeId,
       question: refs.questionInput.value.trim(),
       cards,
       note: ""
@@ -359,10 +475,57 @@ function runDraw() {
     state.currentSession = session;
     refs.noteInput.value = "";
     prependHistory(session);
-    setSummary(`已完成「${mode.name}」抽卡：${cards.map((card) => card.name).join(" / ")}`);
+    setSummary(
+      `已完成「${mode.name} / ${DECK_TYPES[state.deckTypeId].name}」抽卡：${cards.map((card) => getCardShortName(card)).join(" / ")}`,
+      false
+    );
     refs.drawBtn.disabled = false;
     state.isDrawing = false;
   }, 860);
+}
+
+function ensureDeckReady(count) {
+  if (state.deckTypeId === "pair") {
+    if (state.wordDeck.length < count || state.imageDeck.length < count) {
+      setSummary(`当前玩法需要至少 ${count} 张图卡和 ${count} 张字卡，请先导入卡组或切换卡组模式。`, true);
+      return false;
+    }
+    return true;
+  }
+  if (state.deckTypeId === "image" && state.imageDeck.length < count) {
+    setSummary(`当前玩法需要至少 ${count} 张图卡，当前只有 ${state.imageDeck.length} 张。`, true);
+    return false;
+  }
+  if (state.deckTypeId === "word" && state.wordDeck.length < count) {
+    setSummary(`当前玩法需要至少 ${count} 张字卡，当前只有 ${state.wordDeck.length} 张。`, true);
+    return false;
+  }
+  return true;
+}
+
+function drawCards(count) {
+  if (state.deckTypeId === "pair") {
+    const words = pickUnique(state.wordDeck, count);
+    const images = pickUnique(state.imageDeck, count);
+    return words.map((wordCard, index) => {
+      const imageCard = images[index];
+      return {
+        kind: "pair",
+        name: `${wordCard.name} × ${imageCard.name}`,
+        tone: normalizeTone(imageCard.tone || wordCard.tone),
+        keywords: uniqueValues([...(wordCard.keywords || []), ...(imageCard.keywords || [])]),
+        cue: [imageCard.cue, wordCard.cue].filter(Boolean).join(" "),
+        imageCard: { ...imageCard, kind: "image" },
+        wordCard: { ...wordCard, kind: "word" }
+      };
+    });
+  }
+
+  if (state.deckTypeId === "image") {
+    return pickUnique(state.imageDeck, count).map((card) => ({ ...card, kind: "image" }));
+  }
+
+  return pickUnique(state.wordDeck, count).map((card) => ({ ...card, kind: "word" }));
 }
 
 function renderSpread(cards, slotLabels) {
@@ -378,25 +541,14 @@ function renderSpread(cards, slotLabels) {
     const back = document.createElement("div");
     back.className = "card-face card-back";
     const backLabel = document.createElement("span");
-    backLabel.textContent = "OH";
+    backLabel.textContent = state.deckTypeId === "pair" ? "OH+" : "OH";
     back.appendChild(backLabel);
 
     const front = document.createElement("div");
-    front.className = `card-face card-front ${card.tone}`;
-    const slot = document.createElement("p");
-    slot.className = "slot-label";
-    slot.textContent = slotLabels[index] || `位置 ${index + 1}`;
-    const title = document.createElement("h3");
-    title.className = "card-title";
-    title.textContent = `${card.glyph} ${card.name}`;
-    const meta = document.createElement("p");
-    meta.className = "card-meta";
-    meta.textContent = `关键词：${card.keywords.join(" · ")}`;
-    const line = document.createElement("p");
-    line.className = "card-line";
-    line.textContent = card.cue;
+    front.className = `card-face card-front ${normalizeTone(card.tone)}`;
 
-    front.append(slot, title, meta, line);
+    fillCardFront(front, card, slotLabels[index] || `位置 ${index + 1}`);
+
     tile.append(back, front);
     refs.spreadBoard.appendChild(tile);
 
@@ -404,6 +556,94 @@ function renderSpread(cards, slotLabels) {
       tile.classList.add("revealed");
     }, 80 + index * 120);
   });
+}
+
+function fillCardFront(front, card, slotLabel) {
+  const slot = document.createElement("p");
+  slot.className = "slot-label";
+  slot.textContent = `${slotLabel} / ${getCardKindName(card)}`;
+  front.appendChild(slot);
+
+  if (getCardKind(card) === "pair") {
+    const pairTitle = document.createElement("h3");
+    pairTitle.className = "card-title";
+    pairTitle.textContent = `${card.imageCard.name} + ${card.wordCard.name}`;
+
+    const pairWrap = document.createElement("div");
+    pairWrap.className = "pair-wrap";
+
+    const imageBlock = document.createElement("div");
+    imageBlock.className = "image-block";
+    const image = document.createElement("img");
+    image.src = card.imageCard.image;
+    image.alt = card.imageCard.name;
+    image.loading = "lazy";
+    imageBlock.appendChild(image);
+
+    const wordBlock = document.createElement("div");
+    wordBlock.className = "word-block";
+    const wordTitle = document.createElement("p");
+    wordTitle.className = "word-title";
+    const glyph = card.wordCard.glyph ? `${card.wordCard.glyph} ` : "";
+    wordTitle.textContent = `${glyph}${card.wordCard.name}`;
+    const wordKey = document.createElement("p");
+    wordKey.className = "word-key";
+    wordKey.textContent = `字卡关键词：${(card.wordCard.keywords || []).join(" · ")}`;
+    wordBlock.append(wordTitle, wordKey);
+
+    pairWrap.append(imageBlock, wordBlock);
+
+    const meta = document.createElement("p");
+    meta.className = "card-meta";
+    meta.textContent = `图卡关键词：${(card.imageCard.keywords || []).join(" · ")}`;
+
+    const line = document.createElement("p");
+    line.className = "card-line";
+    line.textContent = card.cue || "把图卡和字卡放在一起，说说它们共同指向了什么。";
+
+    front.append(pairTitle, pairWrap, meta, line);
+    return;
+  }
+
+  if (getCardKind(card) === "image") {
+    const title = document.createElement("h3");
+    title.className = "card-title";
+    title.textContent = card.name;
+
+    const imageBlock = document.createElement("div");
+    imageBlock.className = "image-block";
+    const image = document.createElement("img");
+    image.src = card.image;
+    image.alt = card.name;
+    image.loading = "lazy";
+    imageBlock.appendChild(image);
+
+    const meta = document.createElement("p");
+    meta.className = "card-meta";
+    meta.textContent = `关键词：${(card.keywords || []).join(" · ")}`;
+
+    const line = document.createElement("p");
+    line.className = "card-line";
+    line.textContent = card.cue || "描述这个画面正在发生什么。";
+
+    front.append(title, imageBlock, meta, line);
+    return;
+  }
+
+  const title = document.createElement("h3");
+  title.className = "card-title";
+  const glyph = card.glyph ? `${card.glyph} ` : "";
+  title.textContent = `${glyph}${card.name}`;
+
+  const meta = document.createElement("p");
+  meta.className = "card-meta";
+  meta.textContent = `关键词：${(card.keywords || []).join(" · ")}`;
+
+  const line = document.createElement("p");
+  line.className = "card-line";
+  line.textContent = card.cue || "说说这个词触发了你怎样的联想。";
+
+  front.append(title, meta, line);
 }
 
 function renderPrompts() {
@@ -427,15 +667,23 @@ function renderPrompts() {
 
 function buildPrompts(layerId, cards, mode) {
   const base = shuffle(PROMPT_POOL[layerId]).slice(0, 3);
+
   const cardPrompts = cards.map((card, index) => {
     const slot = mode.labels[index] || `位置 ${index + 1}`;
+    const cardName = getCardPromptName(card);
+
     if (layerId === "description") {
-      return `在「${slot}」这张「${card.name}」里，你最先注意到的是形状、动作还是关系？`;
+      if (getCardKind(card) === "pair") {
+        return `在「${slot}」里，图卡「${card.imageCard.name}」你先看见了什么？字卡「${card.wordCard.name}」又强化了什么？`;
+      }
+      return `在「${slot}」这张「${cardName}」里，你最先注意到的是形状、动作还是关系？`;
     }
+
     if (layerId === "association") {
-      return `「${slot} - ${card.name}」让你想到最近哪个具体事件或人物？`;
+      return `「${slot} - ${cardName}」让你想到最近哪个具体事件或人物？`;
     }
-    return `如果「${slot} - ${card.name}」是一条行动建议，你今天愿意做什么最小动作？`;
+
+    return `如果「${slot} - ${cardName}」是一条行动建议，你今天愿意做什么最小动作？`;
   });
 
   const relationPrompt =
@@ -446,10 +694,10 @@ function buildPrompts(layerId, cards, mode) {
         ? `这组牌最像你人生里哪个重复循环？它通常在什么情境出现？`
         : "这组牌共同指向的核心冲突是什么？你准备如何改写它？"
       : layerId === "description"
-      ? `请把「${cards[0].name}」描述成一个场景：地点、人物、动作分别是什么？`
+      ? `请把「${getCardPromptName(cards[0])}」描述成一个场景：地点、人物、动作分别是什么？`
       : layerId === "association"
-      ? `这张「${cards[0].name}」像你哪段记忆？那段记忆与你当前问题有什么联系？`
-      : `这张「${cards[0].name}」触发了你什么感受？你需要被满足的核心需求是什么？`;
+      ? `这张「${getCardPromptName(cards[0])}」像你哪段记忆？那段记忆与你当前问题有什么联系？`
+      : `这张「${getCardPromptName(cards[0])}」触发了你什么感受？你需要被满足的核心需求是什么？`;
 
   return [...base, ...shuffle(cardPrompts).slice(0, 2), relationPrompt];
 }
@@ -474,15 +722,17 @@ function renderHistory() {
     const item = document.createElement("article");
     item.className = "history-item";
     const mode = MODES[session.modeId];
+    const deckType = DECK_TYPES[session.deckTypeId] || DECK_TYPES[inferDeckTypeFromCards(session.cards)] || DECK_TYPES.word;
+
     const time = new Date(session.time);
     const localTime = `${time.getFullYear()}-${pad2(time.getMonth() + 1)}-${pad2(time.getDate())} ${pad2(
       time.getHours()
     )}:${pad2(time.getMinutes())}`;
 
     item.innerHTML = `
-      <strong>${escapeHTML(mode ? mode.name : "未知玩法")} · ${escapeHTML(localTime)}</strong>
+      <strong>${escapeHTML(mode ? mode.name : "未知玩法")} · ${escapeHTML(deckType.name)} · ${escapeHTML(localTime)}</strong>
       <p>问题：${escapeHTML(session.question || "（未填写）")}</p>
-      <p>牌面：${escapeHTML(session.cards.map((card) => card.name).join(" / "))}</p>
+      <p>牌面：${escapeHTML((session.cards || []).map((card) => getCardShortName(card)).join(" / "))}</p>
       <p>笔记：${escapeHTML(session.note || "（未记录）")}</p>
       <div class="actions compact">
         <button class="btn btn-ghost" data-action="replay" data-id="${escapeHTML(session.id)}">回看此局</button>
@@ -514,23 +764,25 @@ function handleHistoryAction(event) {
       return;
     }
     state.modeId = session.modeId in MODES ? session.modeId : "focus";
+    state.deckTypeId = session.deckTypeId in DECK_TYPES ? session.deckTypeId : inferDeckTypeFromCards(session.cards);
     state.currentSession = session;
-    state.currentCards = session.cards;
+    state.currentCards = session.cards || [];
     state.layerId = "description";
     refs.questionInput.value = session.question || "";
     refs.noteInput.value = session.note || "";
     renderModeSwitch();
     renderModeDetail();
+    renderDeckTypeSwitch();
     renderPromptTabs();
-    renderSpread(session.cards, MODES[state.modeId].labels);
+    renderSpread(state.currentCards, MODES[state.modeId].labels);
     renderPrompts();
-    setSummary(`已回看历史：${MODES[state.modeId].name} / ${session.cards.map((card) => card.name).join(" / ")}`);
+    setSummary(`已回看历史：${MODES[state.modeId].name} / ${DECK_TYPES[state.deckTypeId].name}`, false);
   }
 }
 
 function saveCurrentNote() {
   if (!state.currentSession) {
-    setSummary("请先完成一次抽卡，再保存本次洞察记录。");
+    setSummary("请先完成一次抽卡，再保存本次洞察记录。", true);
     return;
   }
   const noteText = refs.noteInput.value.trim();
@@ -543,22 +795,23 @@ function saveCurrentNote() {
   });
   persistHistory();
   renderHistory();
-  setSummary("本次记录已保存到浏览器本地。");
+  setSummary("本次记录已保存到浏览器本地。", false);
 }
 
 async function copyCurrentReport() {
   if (state.currentCards.length === 0) {
-    setSummary("请先抽卡，再复制引导文本。");
+    setSummary("请先抽卡，再复制引导文本。", true);
     return;
   }
   const mode = MODES[state.modeId];
-  const promptItems = Array.from(refs.promptList.querySelectorAll("li")).map((item) => item.textContent);
+  const promptItems = Array.from(refs.promptList.querySelectorAll("li")).map((item) => item.textContent || "");
   const report = [
     "【OH 卡引导记录】",
     `问题：${refs.questionInput.value.trim() || "（未填写）"}`,
     `玩法：${mode.name}`,
+    `卡组：${DECK_TYPES[state.deckTypeId].name}`,
     "牌面：",
-    ...state.currentCards.map((card, index) => `- ${mode.labels[index] || `位置 ${index + 1}`}: ${card.name}（${card.keywords.join(" / ")}）`),
+    ...state.currentCards.map((card, index) => formatCardLineForReport(card, mode.labels[index] || `位置 ${index + 1}`)),
     `当前提问层：${PROMPT_LAYERS.find((layer) => layer.id === state.layerId)?.name || ""}`,
     "引导问题：",
     ...promptItems.map((line) => `- ${line}`),
@@ -566,7 +819,18 @@ async function copyCurrentReport() {
   ].join("\n");
 
   const copied = await copyText(report);
-  setSummary(copied ? "本次引导文本已复制，可直接粘贴到笔记工具。" : "复制失败，请手动复制页面内容。");
+  setSummary(copied ? "本次引导文本已复制，可直接粘贴到笔记工具。" : "复制失败，请手动复制页面内容。", !copied);
+}
+
+function formatCardLineForReport(card, slot) {
+  const kind = getCardKind(card);
+  if (kind === "pair") {
+    return `- ${slot}: 图卡「${card.imageCard.name}」 + 字卡「${card.wordCard.name}」`;
+  }
+  if (kind === "image") {
+    return `- ${slot}: 图卡「${card.name}」`;
+  }
+  return `- ${slot}: 字卡「${card.name}」`;
 }
 
 function resetBoard() {
@@ -579,14 +843,14 @@ function resetBoard() {
   const promptItem = document.createElement("li");
   promptItem.textContent = "你已重置牌面。可先输入问题，再开始抽卡。";
   refs.promptList.appendChild(promptItem);
-  setSummary("牌组已重置，准备开始新一局。");
+  setSummary("牌组已重置，准备开始新一局。", false);
 }
 
 function clearHistory() {
   state.history = [];
   persistHistory();
   renderHistory();
-  setSummary("历史记录已清空。");
+  setSummary("历史记录已清空。", false);
 }
 
 function setMode(modeId) {
@@ -608,11 +872,247 @@ function setMode(modeId) {
     promptItem.textContent = "当前玩法结构已更新，请抽卡后再进行引导提问。";
     refs.promptList.appendChild(promptItem);
   }
-  setSummary(`已切换玩法：${MODES[modeId].name}`);
+  setSummary(`已切换玩法：${MODES[modeId].name}`, false);
 }
 
-function pickCards(count) {
-  return shuffle(CARD_POOL).slice(0, count).map((card) => ({ ...card }));
+function setDeckType(deckTypeId) {
+  if (!(deckTypeId in DECK_TYPES)) {
+    return;
+  }
+  state.deckTypeId = deckTypeId;
+  renderDeckTypeSwitch();
+  renderModeSwitch();
+
+  if (state.currentCards.length > 0) {
+    state.currentCards = [];
+    refs.spreadBoard.className = "spread-board empty";
+    refs.spreadBoard.innerHTML = '<p class="placeholder">卡组模式已切换，请重新抽卡。</p>';
+    refs.promptList.innerHTML = "";
+    const promptItem = document.createElement("li");
+    promptItem.textContent = "卡组模式变化后需要重新抽卡，才能得到正确引导。";
+    refs.promptList.appendChild(promptItem);
+  }
+
+  setSummary(`已切换卡组：${DECK_TYPES[deckTypeId].name}`, false);
+}
+
+async function importDeckFromFile(file, type) {
+  if (!file) {
+    return;
+  }
+  try {
+    const text = await file.text();
+    const raw = JSON.parse(text);
+    if (!Array.isArray(raw)) {
+      throw new Error("JSON 顶层必须是数组。");
+    }
+
+    if (type === "word") {
+      const parsed = raw.map((entry) => normalizeWordCard(entry)).filter(Boolean);
+      if (parsed.length < 5) {
+        throw new Error("字卡数量太少，至少需要 5 张。");
+      }
+      state.wordDeck = parsed;
+      state.deckSource.word = "custom";
+      setSummary(`已导入字卡 ${parsed.length} 张。`, false);
+    } else {
+      const parsed = raw.map((entry) => normalizeImageCard(entry)).filter(Boolean);
+      if (parsed.length < 5) {
+        throw new Error("图卡数量太少，至少需要 5 张。");
+      }
+      state.imageDeck = parsed;
+      state.deckSource.image = "custom";
+      setSummary(`已导入图卡 ${parsed.length} 张。`, false);
+    }
+
+    persistCustomDecks();
+    renderDeckStatus();
+  } catch (error) {
+    console.error("import deck failed", error);
+    setSummary(`导入失败：${error.message || "请检查 JSON 格式"}`, true);
+  }
+}
+
+function resetDecksToBuiltIn() {
+  state.wordDeck = cloneCards(DEFAULT_WORD_DECK);
+  state.imageDeck = cloneCards(DEFAULT_IMAGE_DECK);
+  state.deckSource.word = "built-in";
+  state.deckSource.image = "built-in";
+  persistCustomDecks();
+  renderDeckStatus();
+  setSummary("已恢复内置图卡和字卡。", false);
+}
+
+function hydrateCustomDecks() {
+  try {
+    const raw = localStorage.getItem(CUSTOM_DECK_STORAGE_KEY);
+    if (!raw) {
+      return;
+    }
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== "object") {
+      return;
+    }
+
+    if (Array.isArray(parsed.wordDeck)) {
+      const wordDeck = parsed.wordDeck.map((entry) => normalizeWordCard(entry)).filter(Boolean);
+      if (wordDeck.length >= 5) {
+        state.wordDeck = wordDeck;
+        state.deckSource.word = "custom";
+      }
+    }
+
+    if (Array.isArray(parsed.imageDeck)) {
+      const imageDeck = parsed.imageDeck.map((entry) => normalizeImageCard(entry)).filter(Boolean);
+      if (imageDeck.length >= 5) {
+        state.imageDeck = imageDeck;
+        state.deckSource.image = "custom";
+      }
+    }
+  } catch (error) {
+    console.error("hydrate custom decks failed", error);
+  }
+}
+
+function persistCustomDecks() {
+  localStorage.setItem(
+    CUSTOM_DECK_STORAGE_KEY,
+    JSON.stringify({
+      wordDeck: state.deckSource.word === "custom" ? state.wordDeck : null,
+      imageDeck: state.deckSource.image === "custom" ? state.imageDeck : null
+    })
+  );
+}
+
+function normalizeWordCard(input) {
+  if (!input || typeof input !== "object") {
+    return null;
+  }
+  const name = typeof input.name === "string" ? input.name.trim() : "";
+  if (!name) {
+    return null;
+  }
+  return {
+    name,
+    glyph: typeof input.glyph === "string" ? input.glyph.trim().slice(0, 4) : "",
+    tone: normalizeTone(input.tone),
+    keywords: normalizeKeywords(input.keywords, ["联想"]),
+    cue: typeof input.cue === "string" ? input.cue.trim() : ""
+  };
+}
+
+function normalizeImageCard(input) {
+  if (!input || typeof input !== "object") {
+    return null;
+  }
+  const name = typeof input.name === "string" ? input.name.trim() : "";
+  if (!name) {
+    return null;
+  }
+
+  const tone = normalizeTone(input.tone);
+  const keywords = normalizeKeywords(input.keywords, ["画面", "情境"]);
+  const cue = typeof input.cue === "string" ? input.cue.trim() : "";
+
+  let image = typeof input.image === "string" ? input.image.trim() : "";
+  if (!image) {
+    image = buildSceneImage({
+      name,
+      tone,
+      symbol: "◌",
+      colors: toneColors(tone),
+      keywords,
+      cue
+    });
+  }
+
+  return {
+    name,
+    image,
+    tone,
+    keywords,
+    cue
+  };
+}
+
+function normalizeKeywords(value, fallback) {
+  if (Array.isArray(value)) {
+    const result = value.map((item) => String(item).trim()).filter(Boolean).slice(0, 6);
+    if (result.length > 0) {
+      return result;
+    }
+  }
+  if (typeof value === "string") {
+    const result = value
+      .split(/[、,，/|]/)
+      .map((item) => item.trim())
+      .filter(Boolean)
+      .slice(0, 6);
+    if (result.length > 0) {
+      return result;
+    }
+  }
+  return fallback;
+}
+
+function normalizeTone(value) {
+  const tone = typeof value === "string" ? value.trim().toLowerCase() : "";
+  if (["sand", "moss", "ocean", "fire", "night"].includes(tone)) {
+    return tone;
+  }
+  return "sand";
+}
+
+function toneColors(tone) {
+  if (tone === "moss") {
+    return ["#9dc08f", "#edf6e7", "#648a56"];
+  }
+  if (tone === "ocean") {
+    return ["#86b8c8", "#e7f2f8", "#557d96"];
+  }
+  if (tone === "fire") {
+    return ["#e2a377", "#fbe8d9", "#b56e3d"];
+  }
+  if (tone === "night") {
+    return ["#8d95ae", "#e6e9f3", "#5b637b"];
+  }
+  return ["#e7bb89", "#fceeda", "#b48350"];
+}
+
+function buildSceneImage(scene) {
+  const [c1, c2, c3] = Array.isArray(scene.colors) && scene.colors.length >= 3 ? scene.colors : toneColors(scene.tone || "sand");
+  const symbol = scene.symbol || "◌";
+  const name = scene.name || "图卡";
+  const svg = `
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 360">
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="${c1}"/>
+      <stop offset="55%" stop-color="${c2}"/>
+      <stop offset="100%" stop-color="${c3}"/>
+    </linearGradient>
+  </defs>
+  <rect width="600" height="360" fill="url(#g)"/>
+  <circle cx="510" cy="72" r="52" fill="rgba(255,255,255,0.25)"/>
+  <path d="M0 300 C 110 260 220 320 300 286 C 375 252 475 268 600 236 L600 360 L0 360Z" fill="rgba(255,255,255,0.28)"/>
+  <path d="M0 260 C 90 228 188 286 278 252 C 360 220 460 238 600 194" stroke="rgba(255,255,255,0.36)" stroke-width="4" fill="none"/>
+  <text x="54" y="96" font-size="72" fill="rgba(35,32,28,0.52)" font-family="serif">${escapeSVG(symbol)}</text>
+  <text x="36" y="332" font-size="36" fill="rgba(34,30,26,0.72)" font-family="serif">${escapeSVG(name)}</text>
+</svg>`;
+  return `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`;
+}
+
+function escapeSVG(value) {
+  return String(value)
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
+}
+
+function pickUnique(deck, count) {
+  return shuffle(deck).slice(0, count).map((card) => ({ ...card }));
 }
 
 function shuffle(list) {
@@ -624,8 +1124,74 @@ function shuffle(list) {
   return clone;
 }
 
-function setSummary(text) {
+function setSummary(text, isError) {
   refs.spreadSummary.textContent = text;
+  refs.spreadSummary.style.color = isError ? "#9f3326" : "";
+}
+
+function getCardKind(card) {
+  if (!card || typeof card !== "object") {
+    return "word";
+  }
+  if (card.kind === "pair" || (card.imageCard && card.wordCard)) {
+    return "pair";
+  }
+  if (card.kind === "image" || card.image) {
+    return "image";
+  }
+  return "word";
+}
+
+function getCardKindName(card) {
+  const kind = getCardKind(card);
+  if (kind === "pair") {
+    return "图字配对";
+  }
+  if (kind === "image") {
+    return "图卡";
+  }
+  return "字卡";
+}
+
+function getCardPromptName(card) {
+  const kind = getCardKind(card);
+  if (kind === "pair") {
+    return `${card.imageCard.name} + ${card.wordCard.name}`;
+  }
+  if (kind === "image") {
+    return `${card.name}(图卡)`;
+  }
+  return `${card.name}(字卡)`;
+}
+
+function getCardShortName(card) {
+  const kind = getCardKind(card);
+  if (kind === "pair") {
+    return `${card.imageCard.name}+${card.wordCard.name}`;
+  }
+  return card.name;
+}
+
+function inferDeckTypeFromCards(cards) {
+  if (!Array.isArray(cards) || cards.length === 0) {
+    return "word";
+  }
+  const kind = getCardKind(cards[0]);
+  if (kind === "pair") {
+    return "pair";
+  }
+  if (kind === "image") {
+    return "image";
+  }
+  return "word";
+}
+
+function uniqueValues(list) {
+  return Array.from(new Set(list.filter(Boolean)));
+}
+
+function cloneCards(cards) {
+  return cards.map((card) => ({ ...card, keywords: Array.isArray(card.keywords) ? card.keywords.slice() : [] }));
 }
 
 function escapeHTML(value) {
@@ -698,7 +1264,7 @@ function toggleTimer() {
     if (state.timer.remaining <= 0) {
       stopTimer("开始");
       refs.timerText.textContent = "00:00";
-      setSummary("计时结束。请回看你的牌面洞察并写下行动。");
+      setSummary("计时结束。请回看你的牌面洞察并写下行动。", false);
     }
   }, 1000);
 }

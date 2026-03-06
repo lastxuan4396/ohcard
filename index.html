@@ -43,6 +43,22 @@
           </div>
           <div id="modeSwitch" class="mode-switch"></div>
 
+          <div class="deck-config">
+            <h3>3. 选择卡组</h3>
+            <div id="deckTypeSwitch" class="deck-type-switch"></div>
+            <p class="deck-note">
+              你可以先用内置示例图卡和字卡，也可以导入你自己的卡组 JSON（支持图片 URL 或 base64）。
+            </p>
+            <p id="deckStatus" class="deck-status"></p>
+            <div class="actions compact">
+              <button id="importImageDeckBtn" class="btn btn-ghost">导入图卡 JSON</button>
+              <button id="importWordDeckBtn" class="btn btn-ghost">导入字卡 JSON</button>
+              <button id="resetDeckBtn" class="btn btn-danger">恢复内置卡组</button>
+            </div>
+            <input id="importImageDeckInput" type="file" accept=".json,application/json" hidden />
+            <input id="importWordDeckInput" type="file" accept=".json,application/json" hidden />
+          </div>
+
           <div class="actions">
             <button id="drawBtn" class="btn btn-primary">开始抽卡</button>
             <button id="reshuffleBtn" class="btn btn-ghost">重新洗牌</button>
@@ -67,7 +83,7 @@
 
         <section class="panel draw-panel">
           <div class="draw-head">
-            <h2>3. 抽卡区</h2>
+            <h2>4. 抽卡区</h2>
             <p id="spreadSummary"></p>
           </div>
 
@@ -86,7 +102,7 @@
         </section>
 
         <section class="panel guide-panel">
-          <h2>4. 引导提问</h2>
+          <h2>5. 引导提问</h2>
           <div id="promptTabs" class="prompt-tabs"></div>
           <p id="promptHint" class="prompt-hint"></p>
           <ol id="promptList" class="prompt-list"></ol>
@@ -104,7 +120,7 @@
 
       <section class="bottom-grid">
         <section class="panel note-panel">
-          <h2>5. 记录与行动</h2>
+          <h2>6. 记录与行动</h2>
           <label class="label" for="noteInput">你的洞察、决定、下一步行动</label>
           <textarea
             id="noteInput"
