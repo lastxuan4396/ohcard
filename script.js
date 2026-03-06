@@ -1,0 +1,720 @@
+const MODES = {
+  focus: {
+    name: "单卡聚焦",
+    badge: "1 张核心洞察",
+    count: 1,
+    labels: ["核心线索"],
+    goal: "在复杂情绪里快速抓住一个最重要的信号，适合当下卡顿、决策前的自检。",
+    description: "抽 1 张，先描述，再联想，最后把洞察落到一个行动。",
+    when: "时间少、问题散、需要先看清当前关键点时。",
+    steps: [
+      "描述你最先看到的元素，不解释意义。",
+      "联想这个画面与你最近的现实事件。",
+      "探究这张牌在提醒你坚持什么、放下什么。"
+    ]
+  },
+  timeline: {
+    name: "时间线三张",
+    badge: "过去 / 现在 / 未来",
+    count: 3,
+    labels: ["过去", "现在", "未来"],
+    goal: "梳理事件发展脉络，看清模式如何形成、当下卡点是什么、下一步趋势可能去向哪里。",
+    description: "3 张牌按时序解读，适合职业选择、关系变化、阶段复盘。",
+    when: "需要理解“我是怎么走到这一步”的时候。",
+    steps: [
+      "过去位：识别曾经形成的习惯、信念或情境。",
+      "现在位：指出当前最真实的处境与情绪。",
+      "未来位：不是预言，而是当前路径延续下的可能方向。"
+    ]
+  },
+  mirror: {
+    name: "关系镜像",
+    badge: "我 / 对方 / 连接",
+    count: 3,
+    labels: ["我", "对方", "连接桥梁"],
+    goal: "帮助你看见关系里的双向投射，避免只站在单一视角理解冲突。",
+    description: "从双方与关系本身三个角度看同一议题。",
+    when: "沟通不顺、关系拉扯、想修复互动质量时。",
+    steps: [
+      "我位：我带着怎样的期待、担忧和防御。",
+      "对方位：对方可能在保护什么、表达什么。",
+      "桥梁位：关系需要建立什么新规则或新沟通方式。"
+    ]
+  },
+  diamond: {
+    name: "四维钻石",
+    badge: "事实 / 感受 / 需求 / 行动",
+    count: 4,
+    labels: ["事实", "感受", "需求", "行动"],
+    goal: "把模糊问题拆成可行动结构，避免一直停留在情绪旋涡。",
+    description: "常用于高压情境、拖延循环、职业选择焦虑。",
+    when: "你知道有问题，但不知道怎么落地解决时。",
+    steps: [
+      "事实位：确认客观发生了什么，不做评价。",
+      "感受位：承认真实情绪，而不是压抑。",
+      "需求位：厘清被忽略的核心需要。",
+      "行动位：给出 72 小时内可执行的最小动作。"
+    ]
+  },
+  strategy: {
+    name: "五点策略阵",
+    badge: "现状 / 资源 / 阻碍 / 突破 / 下一步",
+    count: 5,
+    labels: ["现状", "资源", "阻碍", "突破口", "下一步"],
+    goal: "把问题从“我很乱”变成“我知道下一步怎么做”，适合目标推进和阶段规划。",
+    description: "强调资源盘点与障碍转化，结果导向很强。",
+    when: "你准备行动，需要具体策略地图时。",
+    steps: [
+      "现状位：定义你眼前的真实挑战。",
+      "资源位：列出你已经拥有但未充分使用的支持。",
+      "阻碍位：识别最关键的内外阻力。",
+      "突破口位：找到可以撬动局面的杠杆点。",
+      "下一步位：写下今天就能执行的动作。"
+    ]
+  }
+};
+
+const PROMPT_LAYERS = [
+  {
+    id: "description",
+    name: "描述性问题",
+    hint: "先描述眼前画面，不急着解释含义。把“看到什么”与“它像什么”分开说。"
+  },
+  {
+    id: "association",
+    name: "联想性问题",
+    hint: "把牌面连接到你的真实生活和成长经验，找到反复出现的场景模式。"
+  },
+  {
+    id: "inquiry",
+    name: "探究性问题",
+    hint: "进入情绪和需求层面，找出你真正想改变的部分与行动方向。"
+  }
+];
+
+const PROMPT_POOL = {
+  description: [
+    "你看到了什么？",
+    "看上去像什么？",
+    "你认为这是什么？",
+    "最先吸引你注意力的是哪个元素？",
+    "如果用三个词描述这张牌，你会怎么说？"
+  ],
+  association: [
+    "这使你想起什么？",
+    "这是你生活里经常见过的场景吗？",
+    "这在你成长经历中有类似的情境么？",
+    "它像你最近哪个真实事件的缩影？",
+    "这张牌让你想到哪段关系或角色？"
+  ],
+  inquiry: [
+    "你的感觉是什么？",
+    "在这个情境中你的感受是什么？",
+    "你最想保护的需求是什么？",
+    "如果这张牌在提醒你一件事，那会是什么？",
+    "你愿意为改变做的第一个动作是什么？"
+  ]
+};
+
+const CARD_POOL = [
+  { name: "钥匙", glyph: "✦", tone: "sand", keywords: ["开启", "机会", "方法"], cue: "眼前某扇门需要主动试探，而不是等待许可。" },
+  { name: "桥", glyph: "▤", tone: "ocean", keywords: ["连接", "过渡", "对话"], cue: "两端都存在价值，重点是如何搭建可通行的路径。" },
+  { name: "门", glyph: "▣", tone: "sand", keywords: ["边界", "进出", "抉择"], cue: "不是所有门都要进，关键是你要对入口负责。" },
+  { name: "镜子", glyph: "◍", tone: "night", keywords: ["投射", "自我", "觉察"], cue: "你看到的他人反应，可能也在映照自己的状态。" },
+  { name: "楼梯", glyph: "⋰", tone: "moss", keywords: ["进阶", "过程", "耐心"], cue: "真正的变化像爬楼梯，不是一次跃迁。" },
+  { name: "迷宫", glyph: "⌘", tone: "night", keywords: ["复杂", "试错", "方向"], cue: "你不是没能力，而是需要新的观察路径。" },
+  { name: "灯塔", glyph: "⚑", tone: "ocean", keywords: ["指引", "稳定", "信号"], cue: "你可以先做那个最稳定、最可见的动作。" },
+  { name: "船", glyph: "⛵", tone: "ocean", keywords: ["旅程", "承载", "探索"], cue: "离岸是风险，也是成长必要阶段。" },
+  { name: "雨伞", glyph: "☂", tone: "night", keywords: ["保护", "边界", "照顾"], cue: "请区分真实风险与想象中的灾难。" },
+  { name: "风筝", glyph: "◬", tone: "fire", keywords: ["理想", "牵引", "平衡"], cue: "自由需要一条稳定的线来支撑高度。" },
+  { name: "树", glyph: "✳", tone: "moss", keywords: ["扎根", "成长", "生命力"], cue: "先照顾根系，再谈枝叶的扩展。" },
+  { name: "种子", glyph: "•", tone: "moss", keywords: ["起点", "潜力", "等待"], cue: "你正在做的事还在发芽期，不必急于结果。" },
+  { name: "石头", glyph: "◼", tone: "night", keywords: ["现实", "重量", "沉着"], cue: "让你不舒服的限制，也可能是稳定支点。" },
+  { name: "河流", glyph: "≈", tone: "ocean", keywords: ["流动", "顺势", "变化"], cue: "对抗流向会消耗，你可以找更顺势的走法。" },
+  { name: "山峰", glyph: "▲", tone: "sand", keywords: ["目标", "挑战", "视野"], cue: "越接近目标越需要节奏，而不是蛮力。" },
+  { name: "时钟", glyph: "◴", tone: "night", keywords: ["节奏", "期限", "优先级"], cue: "你要先决定什么重要，再安排时间。" },
+  { name: "地图", glyph: "⌖", tone: "sand", keywords: ["路径", "定位", "决策"], cue: "先确认你在哪，再决定去哪里。" },
+  { name: "背包", glyph: "▢", tone: "sand", keywords: ["资源", "准备", "负担"], cue: "不是带得越多越安全，轻装也能更远。" },
+  { name: "猫", glyph: "◠", tone: "moss", keywords: ["直觉", "敏感", "独立"], cue: "信号很细微，但你的身体已经先感知到了。" },
+  { name: "鸟", glyph: "⌯", tone: "ocean", keywords: ["视角", "自由", "迁移"], cue: "抬高视角后，困境会呈现不同结构。" },
+  { name: "杯子", glyph: "◖", tone: "sand", keywords: ["容纳", "情绪", "关系"], cue: "先看容器是否够稳，再决定要装什么。" },
+  { name: "锁", glyph: "⛒", tone: "night", keywords: ["限制", "安全", "秘密"], cue: "你在保护重要东西，同时也可能困住自己。" },
+  { name: "火焰", glyph: "♨", tone: "fire", keywords: ["热情", "转化", "能量"], cue: "这股能量需要出口，否则会反噬。" },
+  { name: "窗", glyph: "▦", tone: "ocean", keywords: ["观察", "机会", "边界"], cue: "你不必立刻跳出去，先看清外部环境。" },
+  { name: "路标", glyph: "➤", tone: "sand", keywords: ["方向", "选择", "提示"], cue: "答案可能早就在路上，只是你没停下来读它。" },
+  { name: "面具", glyph: "◑", tone: "night", keywords: ["角色", "防御", "真实"], cue: "你戴着的角色帮过你，也可能限制了你。" },
+  { name: "沙漏", glyph: "⌛", tone: "sand", keywords: ["等待", "过程", "节律"], cue: "有些事不是拖延，而是还在沉淀周期里。" },
+  { name: "剪刀", glyph: "✂", tone: "fire", keywords: ["切断", "聚焦", "取舍"], cue: "清晰来自删减，不来自叠加。" },
+  { name: "线团", glyph: "∞", tone: "moss", keywords: ["纠缠", "线索", "梳理"], cue: "慢慢拉开线头，你会找到可解的起点。" },
+  { name: "指南针", glyph: "✪", tone: "ocean", keywords: ["方向感", "价值", "校准"], cue: "先定义你的北方，再决定速度。" },
+  { name: "锚", glyph: "⚓", tone: "night", keywords: ["稳定", "落地", "停靠"], cue: "你可以先让自己稳定，再处理外部波浪。" },
+  { name: "隧道", glyph: "◍", tone: "night", keywords: ["未知", "过渡", "勇气"], cue: "黑暗阶段不等于走错，可能只是未见出口。" },
+  { name: "花园", glyph: "✿", tone: "moss", keywords: ["滋养", "关系", "长期"], cue: "你投入在哪里，哪里就会慢慢繁盛。" },
+  { name: "舞台", glyph: "▵", tone: "fire", keywords: ["表达", "看见", "影响"], cue: "被看见并不危险，压抑表达才会积压能量。" },
+  { name: "信封", glyph: "✉", tone: "sand", keywords: ["消息", "沟通", "澄清"], cue: "把想法说清楚，比猜测更省力。" },
+  { name: "电话", glyph: "☎", tone: "ocean", keywords: ["联系", "回应", "连接"], cue: "一通真实沟通可能比长时间内耗更有效。" },
+  { name: "帆", glyph: "⧉", tone: "ocean", keywords: ["风向", "调整", "推进"], cue: "改变角度比硬顶风阻更有用。" },
+  { name: "羽毛", glyph: "❧", tone: "moss", keywords: ["轻盈", "灵感", "感受"], cue: "不是每个决定都要沉重，你也可以轻一点。" },
+  { name: "相机", glyph: "◉", tone: "night", keywords: ["聚焦", "叙事", "取景"], cue: "你选择看见什么，就会放大什么。" },
+  { name: "火车", glyph: "▣", tone: "fire", keywords: ["轨道", "惯性", "时机"], cue: "先上车再微调路线，也是一种策略。" },
+  { name: "轮盘", glyph: "◎", tone: "sand", keywords: ["循环", "概率", "选择"], cue: "重复不是命运，而是未更新的选择机制。" },
+  { name: "云", glyph: "☁", tone: "ocean", keywords: ["情绪", "模糊", "变化"], cue: "不清楚不是错误，它提醒你先停下来感受。" },
+  { name: "小路", glyph: "⤳", tone: "moss", keywords: ["探索", "试步", "弹性"], cue: "先走出一小步，路会边走边显现。" },
+  { name: "灯", glyph: "✺", tone: "fire", keywords: ["看见", "清晰", "勇气"], cue: "当你照亮盲区，选择会自然变清晰。" },
+  { name: "帘幕", glyph: "▧", tone: "night", keywords: ["遮蔽", "等待", "揭示"], cue: "此刻不必强行揭开一切，节奏同样重要。" },
+  { name: "望远镜", glyph: "⎈", tone: "ocean", keywords: ["远景", "格局", "规划"], cue: "你需要看更远，才能理解当下动作的价值。" },
+  { name: "画框", glyph: "▢", tone: "sand", keywords: ["边界", "定义", "意义"], cue: "改变框架，你对问题的解释会一起改变。" },
+  { name: "琴弦", glyph: "𝄞", tone: "moss", keywords: ["张力", "共振", "调音"], cue: "不是越紧越好，合适张力才有好声音。" },
+  { name: "拼图", glyph: "▱", tone: "sand", keywords: ["整合", "碎片", "全局"], cue: "缺失的一块会在行动中出现，不只在思考里出现。" },
+  { name: "天秤", glyph: "⚖", tone: "night", keywords: ["平衡", "判断", "取舍"], cue: "你可以接受权衡，而不是追求完美兼得。" },
+  { name: "钥匙孔", glyph: "◌", tone: "fire", keywords: ["入口", "视角", "专注"], cue: "先从一个小入口切入，局面就会开始松动。" }
+];
+
+const STORAGE_KEY = "oh-card-lab-history-v1";
+
+const refs = {
+  questionInput: document.getElementById("questionInput"),
+  modeBadge: document.getElementById("modeBadge"),
+  modeSwitch: document.getElementById("modeSwitch"),
+  drawBtn: document.getElementById("drawBtn"),
+  reshuffleBtn: document.getElementById("reshuffleBtn"),
+  deck: document.getElementById("deck"),
+  spreadSummary: document.getElementById("spreadSummary"),
+  spreadBoard: document.getElementById("spreadBoard"),
+  modeGoal: document.getElementById("modeGoal"),
+  modeSteps: document.getElementById("modeSteps"),
+  promptTabs: document.getElementById("promptTabs"),
+  promptHint: document.getElementById("promptHint"),
+  promptList: document.getElementById("promptList"),
+  regenPromptBtn: document.getElementById("regenPromptBtn"),
+  copyReportBtn: document.getElementById("copyReportBtn"),
+  noteInput: document.getElementById("noteInput"),
+  saveNoteBtn: document.getElementById("saveNoteBtn"),
+  clearNoteBtn: document.getElementById("clearNoteBtn"),
+  historyList: document.getElementById("historyList"),
+  clearHistoryBtn: document.getElementById("clearHistoryBtn"),
+  playbookGrid: document.getElementById("playbookGrid"),
+  timerMinutes: document.getElementById("timerMinutes"),
+  timerToggle: document.getElementById("timerToggle"),
+  timerText: document.getElementById("timerText")
+};
+
+const state = {
+  modeId: "focus",
+  layerId: "description",
+  drawVersion: 0,
+  isDrawing: false,
+  currentCards: [],
+  currentSession: null,
+  history: loadHistory(),
+  timer: {
+    duration: 180,
+    remaining: 180,
+    running: false,
+    intervalId: null
+  }
+};
+
+init();
+
+function init() {
+  renderModeSwitch();
+  renderModeDetail();
+  renderPromptTabs();
+  renderPlaybook();
+  renderHistory();
+  setSummary("选择玩法并开始抽卡，你会看到对应牌阵和分层引导问题。");
+  bindEvents();
+  updateTimerDisplay();
+}
+
+function bindEvents() {
+  refs.modeSwitch.addEventListener("click", (event) => {
+    const button = event.target.closest("button[data-mode]");
+    if (!button) {
+      return;
+    }
+    setMode(button.dataset.mode);
+  });
+
+  refs.promptTabs.addEventListener("click", (event) => {
+    const button = event.target.closest("button[data-layer]");
+    if (!button) {
+      return;
+    }
+    state.layerId = button.dataset.layer;
+    renderPromptTabs();
+    renderPrompts();
+  });
+
+  refs.drawBtn.addEventListener("click", runDraw);
+  refs.reshuffleBtn.addEventListener("click", resetBoard);
+  refs.regenPromptBtn.addEventListener("click", renderPrompts);
+  refs.saveNoteBtn.addEventListener("click", saveCurrentNote);
+  refs.clearNoteBtn.addEventListener("click", () => {
+    refs.noteInput.value = "";
+  });
+  refs.copyReportBtn.addEventListener("click", copyCurrentReport);
+  refs.clearHistoryBtn.addEventListener("click", clearHistory);
+  refs.historyList.addEventListener("click", handleHistoryAction);
+  refs.deck.addEventListener("click", runDraw);
+  refs.timerToggle.addEventListener("click", toggleTimer);
+}
+
+function renderModeSwitch() {
+  refs.modeSwitch.innerHTML = "";
+  Object.entries(MODES).forEach(([modeId, mode]) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = `mode-btn ${modeId === state.modeId ? "active" : ""}`;
+    button.dataset.mode = modeId;
+    button.innerHTML = `<strong>${mode.name}</strong><span>${mode.description}</span>`;
+    refs.modeSwitch.appendChild(button);
+  });
+  refs.modeBadge.textContent = MODES[state.modeId].badge;
+}
+
+function renderModeDetail() {
+  const mode = MODES[state.modeId];
+  refs.modeGoal.textContent = mode.goal;
+  refs.modeSteps.innerHTML = "";
+  mode.steps.forEach((stepText) => {
+    const item = document.createElement("li");
+    item.textContent = stepText;
+    refs.modeSteps.appendChild(item);
+  });
+}
+
+function renderPromptTabs() {
+  refs.promptTabs.innerHTML = "";
+  PROMPT_LAYERS.forEach((layer) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = `prompt-tab ${layer.id === state.layerId ? "active" : ""}`;
+    button.dataset.layer = layer.id;
+    button.textContent = layer.name;
+    refs.promptTabs.appendChild(button);
+  });
+  const layer = PROMPT_LAYERS.find((entry) => entry.id === state.layerId);
+  refs.promptHint.textContent = layer ? layer.hint : "";
+}
+
+function renderPlaybook() {
+  refs.playbookGrid.innerHTML = "";
+  Object.values(MODES).forEach((mode) => {
+    const box = document.createElement("article");
+    box.className = "playbook-item";
+    const title = document.createElement("h3");
+    title.textContent = `${mode.name} (${mode.count} 张)`;
+    const when = document.createElement("p");
+    when.textContent = `适用场景：${mode.when}`;
+    const labels = document.createElement("p");
+    labels.textContent = `位置定义：${mode.labels.join(" / ")}`;
+    const steps = document.createElement("ol");
+    mode.steps.forEach((step) => {
+      const item = document.createElement("li");
+      item.textContent = step;
+      steps.appendChild(item);
+    });
+    box.append(title, when, labels, steps);
+    refs.playbookGrid.appendChild(box);
+  });
+}
+
+function runDraw() {
+  if (state.isDrawing) {
+    return;
+  }
+  const mode = MODES[state.modeId];
+  const cards = pickCards(mode.count);
+  const drawToken = Date.now();
+  state.drawVersion = drawToken;
+  state.isDrawing = true;
+
+  refs.drawBtn.disabled = true;
+  refs.deck.classList.remove("shuffling");
+  void refs.deck.offsetWidth;
+  refs.deck.classList.add("shuffling");
+
+  setTimeout(() => {
+    if (state.drawVersion !== drawToken) {
+      return;
+    }
+    refs.deck.classList.remove("shuffling");
+    state.currentCards = cards;
+    state.layerId = "description";
+    renderPromptTabs();
+    renderSpread(cards, mode.labels);
+    renderPrompts();
+
+    const session = {
+      id: `${Date.now()}-${Math.random().toString(16).slice(2, 8)}`,
+      time: new Date().toISOString(),
+      modeId: state.modeId,
+      question: refs.questionInput.value.trim(),
+      cards,
+      note: ""
+    };
+
+    state.currentSession = session;
+    refs.noteInput.value = "";
+    prependHistory(session);
+    setSummary(`已完成「${mode.name}」抽卡：${cards.map((card) => card.name).join(" / ")}`);
+    refs.drawBtn.disabled = false;
+    state.isDrawing = false;
+  }, 860);
+}
+
+function renderSpread(cards, slotLabels) {
+  refs.spreadBoard.className = "spread-board";
+  refs.spreadBoard.classList.add(`cols-${Math.min(cards.length, 5)}`);
+  refs.spreadBoard.innerHTML = "";
+
+  cards.forEach((card, index) => {
+    const tile = document.createElement("article");
+    tile.className = "card-tile";
+    tile.style.setProperty("--delay", `${index * 120}ms`);
+
+    const back = document.createElement("div");
+    back.className = "card-face card-back";
+    const backLabel = document.createElement("span");
+    backLabel.textContent = "OH";
+    back.appendChild(backLabel);
+
+    const front = document.createElement("div");
+    front.className = `card-face card-front ${card.tone}`;
+    const slot = document.createElement("p");
+    slot.className = "slot-label";
+    slot.textContent = slotLabels[index] || `位置 ${index + 1}`;
+    const title = document.createElement("h3");
+    title.className = "card-title";
+    title.textContent = `${card.glyph} ${card.name}`;
+    const meta = document.createElement("p");
+    meta.className = "card-meta";
+    meta.textContent = `关键词：${card.keywords.join(" · ")}`;
+    const line = document.createElement("p");
+    line.className = "card-line";
+    line.textContent = card.cue;
+
+    front.append(slot, title, meta, line);
+    tile.append(back, front);
+    refs.spreadBoard.appendChild(tile);
+
+    setTimeout(() => {
+      tile.classList.add("revealed");
+    }, 80 + index * 120);
+  });
+}
+
+function renderPrompts() {
+  refs.promptList.innerHTML = "";
+  if (state.currentCards.length === 0) {
+    const item = document.createElement("li");
+    item.textContent = "你还没有抽卡，先抽卡后系统会生成分层引导问题。";
+    refs.promptList.appendChild(item);
+    return;
+  }
+
+  const mode = MODES[state.modeId];
+  const layerPrompts = buildPrompts(state.layerId, state.currentCards, mode);
+
+  layerPrompts.forEach((prompt) => {
+    const item = document.createElement("li");
+    item.textContent = prompt;
+    refs.promptList.appendChild(item);
+  });
+}
+
+function buildPrompts(layerId, cards, mode) {
+  const base = shuffle(PROMPT_POOL[layerId]).slice(0, 3);
+  const cardPrompts = cards.map((card, index) => {
+    const slot = mode.labels[index] || `位置 ${index + 1}`;
+    if (layerId === "description") {
+      return `在「${slot}」这张「${card.name}」里，你最先注意到的是形状、动作还是关系？`;
+    }
+    if (layerId === "association") {
+      return `「${slot} - ${card.name}」让你想到最近哪个具体事件或人物？`;
+    }
+    return `如果「${slot} - ${card.name}」是一条行动建议，你今天愿意做什么最小动作？`;
+  });
+
+  const relationPrompt =
+    cards.length > 1
+      ? layerId === "description"
+        ? `把这 ${cards.length} 张牌放在一起看，哪两张最像同一条故事线？`
+        : layerId === "association"
+        ? `这组牌最像你人生里哪个重复循环？它通常在什么情境出现？`
+        : "这组牌共同指向的核心冲突是什么？你准备如何改写它？"
+      : layerId === "description"
+      ? `请把「${cards[0].name}」描述成一个场景：地点、人物、动作分别是什么？`
+      : layerId === "association"
+      ? `这张「${cards[0].name}」像你哪段记忆？那段记忆与你当前问题有什么联系？`
+      : `这张「${cards[0].name}」触发了你什么感受？你需要被满足的核心需求是什么？`;
+
+  return [...base, ...shuffle(cardPrompts).slice(0, 2), relationPrompt];
+}
+
+function prependHistory(session) {
+  state.history = [session, ...state.history].slice(0, 30);
+  persistHistory();
+  renderHistory();
+}
+
+function renderHistory() {
+  refs.historyList.innerHTML = "";
+  if (state.history.length === 0) {
+    const empty = document.createElement("p");
+    empty.className = "history-empty";
+    empty.textContent = "还没有历史记录。每次抽卡后会自动保存在本机浏览器。";
+    refs.historyList.appendChild(empty);
+    return;
+  }
+
+  state.history.forEach((session) => {
+    const item = document.createElement("article");
+    item.className = "history-item";
+    const mode = MODES[session.modeId];
+    const time = new Date(session.time);
+    const localTime = `${time.getFullYear()}-${pad2(time.getMonth() + 1)}-${pad2(time.getDate())} ${pad2(
+      time.getHours()
+    )}:${pad2(time.getMinutes())}`;
+
+    item.innerHTML = `
+      <strong>${escapeHTML(mode ? mode.name : "未知玩法")} · ${escapeHTML(localTime)}</strong>
+      <p>问题：${escapeHTML(session.question || "（未填写）")}</p>
+      <p>牌面：${escapeHTML(session.cards.map((card) => card.name).join(" / "))}</p>
+      <p>笔记：${escapeHTML(session.note || "（未记录）")}</p>
+      <div class="actions compact">
+        <button class="btn btn-ghost" data-action="replay" data-id="${escapeHTML(session.id)}">回看此局</button>
+        <button class="btn btn-danger" data-action="remove" data-id="${escapeHTML(session.id)}">删除</button>
+      </div>
+    `;
+    refs.historyList.appendChild(item);
+  });
+}
+
+function handleHistoryAction(event) {
+  const button = event.target.closest("button[data-action]");
+  if (!button) {
+    return;
+  }
+  const { action, id } = button.dataset;
+  if (action === "remove") {
+    state.history = state.history.filter((entry) => entry.id !== id);
+    if (state.currentSession && state.currentSession.id === id) {
+      state.currentSession = null;
+    }
+    persistHistory();
+    renderHistory();
+    return;
+  }
+  if (action === "replay") {
+    const session = state.history.find((entry) => entry.id === id);
+    if (!session) {
+      return;
+    }
+    state.modeId = session.modeId in MODES ? session.modeId : "focus";
+    state.currentSession = session;
+    state.currentCards = session.cards;
+    state.layerId = "description";
+    refs.questionInput.value = session.question || "";
+    refs.noteInput.value = session.note || "";
+    renderModeSwitch();
+    renderModeDetail();
+    renderPromptTabs();
+    renderSpread(session.cards, MODES[state.modeId].labels);
+    renderPrompts();
+    setSummary(`已回看历史：${MODES[state.modeId].name} / ${session.cards.map((card) => card.name).join(" / ")}`);
+  }
+}
+
+function saveCurrentNote() {
+  if (!state.currentSession) {
+    setSummary("请先完成一次抽卡，再保存本次洞察记录。");
+    return;
+  }
+  const noteText = refs.noteInput.value.trim();
+  state.currentSession.note = noteText;
+  state.history = state.history.map((entry) => {
+    if (entry.id === state.currentSession.id) {
+      return { ...entry, note: noteText };
+    }
+    return entry;
+  });
+  persistHistory();
+  renderHistory();
+  setSummary("本次记录已保存到浏览器本地。");
+}
+
+async function copyCurrentReport() {
+  if (state.currentCards.length === 0) {
+    setSummary("请先抽卡，再复制引导文本。");
+    return;
+  }
+  const mode = MODES[state.modeId];
+  const promptItems = Array.from(refs.promptList.querySelectorAll("li")).map((item) => item.textContent);
+  const report = [
+    "【OH 卡引导记录】",
+    `问题：${refs.questionInput.value.trim() || "（未填写）"}`,
+    `玩法：${mode.name}`,
+    "牌面：",
+    ...state.currentCards.map((card, index) => `- ${mode.labels[index] || `位置 ${index + 1}`}: ${card.name}（${card.keywords.join(" / ")}）`),
+    `当前提问层：${PROMPT_LAYERS.find((layer) => layer.id === state.layerId)?.name || ""}`,
+    "引导问题：",
+    ...promptItems.map((line) => `- ${line}`),
+    `笔记：${refs.noteInput.value.trim() || "（未填写）"}`
+  ].join("\n");
+
+  const copied = await copyText(report);
+  setSummary(copied ? "本次引导文本已复制，可直接粘贴到笔记工具。" : "复制失败，请手动复制页面内容。");
+}
+
+function resetBoard() {
+  state.currentCards = [];
+  state.currentSession = null;
+  refs.noteInput.value = "";
+  refs.spreadBoard.className = "spread-board empty";
+  refs.spreadBoard.innerHTML = '<p class="placeholder">牌面已重置。点击“开始抽卡”开始新一局。</p>';
+  refs.promptList.innerHTML = "";
+  const promptItem = document.createElement("li");
+  promptItem.textContent = "你已重置牌面。可先输入问题，再开始抽卡。";
+  refs.promptList.appendChild(promptItem);
+  setSummary("牌组已重置，准备开始新一局。");
+}
+
+function clearHistory() {
+  state.history = [];
+  persistHistory();
+  renderHistory();
+  setSummary("历史记录已清空。");
+}
+
+function setMode(modeId) {
+  if (!(modeId in MODES)) {
+    return;
+  }
+  state.modeId = modeId;
+  renderModeSwitch();
+  renderModeDetail();
+  if (state.currentCards.length > 0 && state.currentCards.length === MODES[modeId].count) {
+    renderSpread(state.currentCards, MODES[modeId].labels);
+    renderPrompts();
+  } else if (state.currentCards.length > 0) {
+    state.currentCards = [];
+    refs.spreadBoard.className = "spread-board empty";
+    refs.spreadBoard.innerHTML = '<p class="placeholder">玩法已切换，请重新抽卡以匹配新的牌阵结构。</p>';
+    refs.promptList.innerHTML = "";
+    const promptItem = document.createElement("li");
+    promptItem.textContent = "当前玩法结构已更新，请抽卡后再进行引导提问。";
+    refs.promptList.appendChild(promptItem);
+  }
+  setSummary(`已切换玩法：${MODES[modeId].name}`);
+}
+
+function pickCards(count) {
+  return shuffle(CARD_POOL).slice(0, count).map((card) => ({ ...card }));
+}
+
+function shuffle(list) {
+  const clone = list.slice();
+  for (let i = clone.length - 1; i > 0; i -= 1) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [clone[i], clone[j]] = [clone[j], clone[i]];
+  }
+  return clone;
+}
+
+function setSummary(text) {
+  refs.spreadSummary.textContent = text;
+}
+
+function escapeHTML(value) {
+  return String(value)
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
+}
+
+function pad2(value) {
+  return String(value).padStart(2, "0");
+}
+
+function loadHistory() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) {
+      return [];
+    }
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) {
+      return [];
+    }
+    return parsed.filter((entry) => entry && Array.isArray(entry.cards) && typeof entry.id === "string");
+  } catch (error) {
+    console.error("loadHistory failed", error);
+    return [];
+  }
+}
+
+function persistHistory() {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(state.history));
+}
+
+async function copyText(text) {
+  try {
+    await navigator.clipboard.writeText(text);
+    return true;
+  } catch (error) {
+    const hidden = document.createElement("textarea");
+    hidden.value = text;
+    hidden.setAttribute("readonly", "");
+    hidden.style.position = "absolute";
+    hidden.style.left = "-9999px";
+    document.body.appendChild(hidden);
+    hidden.select();
+    const copied = document.execCommand("copy");
+    document.body.removeChild(hidden);
+    return copied;
+  }
+}
+
+function toggleTimer() {
+  if (state.timer.running) {
+    stopTimer("继续");
+    return;
+  }
+  if (state.timer.remaining <= 0 || state.timer.remaining === state.timer.duration) {
+    const minutes = Math.max(1, Math.min(20, Number(refs.timerMinutes.value) || 3));
+    state.timer.duration = minutes * 60;
+    state.timer.remaining = state.timer.duration;
+  }
+  state.timer.running = true;
+  refs.timerToggle.textContent = "暂停";
+  state.timer.intervalId = setInterval(() => {
+    state.timer.remaining -= 1;
+    updateTimerDisplay();
+    if (state.timer.remaining <= 0) {
+      stopTimer("开始");
+      refs.timerText.textContent = "00:00";
+      setSummary("计时结束。请回看你的牌面洞察并写下行动。");
+    }
+  }, 1000);
+}
+
+function stopTimer(buttonText) {
+  state.timer.running = false;
+  if (state.timer.intervalId) {
+    clearInterval(state.timer.intervalId);
+    state.timer.intervalId = null;
+  }
+  refs.timerToggle.textContent = buttonText;
+}
+
+function updateTimerDisplay() {
+  const remaining = Math.max(0, state.timer.remaining);
+  const minute = Math.floor(remaining / 60);
+  const second = remaining % 60;
+  refs.timerText.textContent = `${pad2(minute)}:${pad2(second)}`;
+}

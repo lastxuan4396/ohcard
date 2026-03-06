@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>OH Card Studio</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Ma+Shan+Zheng&family=Noto+Serif+SC:wght@400;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="ambient">
+      <div class="shape shape-a"></div>
+      <div class="shape shape-b"></div>
+      <div class="shape shape-c"></div>
+    </div>
+
+    <div class="app-shell">
+      <header class="app-header panel">
+        <p class="eyebrow">OH CARD PRACTICE LAB</p>
+        <h1>OH 卡多玩法引导工作台</h1>
+        <p class="lead">
+          一页内完成：设题 -> 抽卡 -> 描述 -> 联想 -> 探究 -> 行动。支持多种牌阵、动态抽卡动画、引导问题生成和复盘导出。
+        </p>
+      </header>
+
+      <main class="main-grid">
+        <section class="panel control-panel">
+          <h2>1. 设定主题</h2>
+          <label class="label" for="questionInput">你现在最想探索的问题</label>
+          <textarea
+            id="questionInput"
+            placeholder="例如：我最近对工作转型很纠结，接下来该怎么走？"
+          ></textarea>
+
+          <div class="mode-head">
+            <h2>2. 选择玩法</h2>
+            <span id="modeBadge" class="mode-badge"></span>
+          </div>
+          <div id="modeSwitch" class="mode-switch"></div>
+
+          <div class="actions">
+            <button id="drawBtn" class="btn btn-primary">开始抽卡</button>
+            <button id="reshuffleBtn" class="btn btn-ghost">重新洗牌</button>
+          </div>
+
+          <div class="timer-wrap">
+            <h3>专注计时</h3>
+            <div class="timer-row">
+              <label class="label-inline" for="timerMinutes">分钟</label>
+              <input id="timerMinutes" type="number" min="1" max="20" value="3" />
+              <button id="timerToggle" class="btn btn-small">开始</button>
+            </div>
+            <p id="timerText" class="timer-text">03:00</p>
+          </div>
+
+          <div class="mode-detail">
+            <h3>当前玩法说明</h3>
+            <p id="modeGoal"></p>
+            <ol id="modeSteps"></ol>
+          </div>
+        </section>
+
+        <section class="panel draw-panel">
+          <div class="draw-head">
+            <h2>3. 抽卡区</h2>
+            <p id="spreadSummary"></p>
+          </div>
+
+          <div class="deck-zone">
+            <div id="deck" class="deck" role="img" aria-label="OH card deck">
+              <span class="deck-layer layer-1"></span>
+              <span class="deck-layer layer-2"></span>
+              <span class="deck-layer layer-3"></span>
+              <span class="deck-core">OH</span>
+            </div>
+          </div>
+
+          <div id="spreadBoard" class="spread-board empty">
+            <p class="placeholder">选择玩法后点击“开始抽卡”，卡牌会在这里翻转出现。</p>
+          </div>
+        </section>
+
+        <section class="panel guide-panel">
+          <h2>4. 引导提问</h2>
+          <div id="promptTabs" class="prompt-tabs"></div>
+          <p id="promptHint" class="prompt-hint"></p>
+          <ol id="promptList" class="prompt-list"></ol>
+          <div class="actions compact">
+            <button id="regenPromptBtn" class="btn btn-ghost">换一组提问</button>
+            <button id="copyReportBtn" class="btn btn-primary">复制本次引导文本</button>
+          </div>
+        </section>
+      </main>
+
+      <section class="panel playbook-panel">
+        <h2>玩法融合指南（详细说明）</h2>
+        <div id="playbookGrid" class="playbook-grid"></div>
+      </section>
+
+      <section class="bottom-grid">
+        <section class="panel note-panel">
+          <h2>5. 记录与行动</h2>
+          <label class="label" for="noteInput">你的洞察、决定、下一步行动</label>
+          <textarea
+            id="noteInput"
+            placeholder="例如：我发现自己害怕失控。下一步：本周约一位前辈聊转型路径。"
+          ></textarea>
+          <div class="actions compact">
+            <button id="saveNoteBtn" class="btn btn-primary">保存到本地记录</button>
+            <button id="clearNoteBtn" class="btn btn-ghost">清空输入</button>
+          </div>
+        </section>
+
+        <section class="panel history-panel">
+          <div class="history-head">
+            <h2>历史回看</h2>
+            <button id="clearHistoryBtn" class="btn btn-danger">清空历史</button>
+          </div>
+          <div id="historyList" class="history-list"></div>
+        </section>
+      </section>
+    </div>
+
+    <script src="./script.js"></script>
+  </body>
+</html>
