@@ -51,6 +51,30 @@
               <div id="layoutDirectionSwitch" class="direction-switch"></div>
               <p class="deck-note">图卡在上、字卡在下作为一个整体，支持上/右/下/左四个方向旋转。</p>
             </div>
+            <div class="overlay-config">
+              <h3>5. 图三复刻精修</h3>
+              <div class="overlay-grid">
+                <label class="overlay-item" for="overlayLeftInput"
+                  >左边距 <span id="overlayLeftValue" class="overlay-value"></span>
+                </label>
+                <input id="overlayLeftInput" type="range" min="6" max="24" step="0.2" value="11.8" />
+                <label class="overlay-item" for="overlayRightInput"
+                  >右边距 <span id="overlayRightValue" class="overlay-value"></span>
+                </label>
+                <input id="overlayRightInput" type="range" min="6" max="24" step="0.2" value="11.8" />
+                <label class="overlay-item" for="overlayTopInput"
+                  >上边距 <span id="overlayTopValue" class="overlay-value"></span>
+                </label>
+                <input id="overlayTopInput" type="range" min="6" max="24" step="0.2" value="12.6" />
+                <label class="overlay-item" for="overlayBottomInput"
+                  >下边距 <span id="overlayBottomValue" class="overlay-value"></span>
+                </label>
+                <input id="overlayBottomInput" type="range" min="6" max="24" step="0.2" value="10.8" />
+              </div>
+              <div class="actions compact">
+                <button id="resetOverlayBtn" class="btn btn-ghost">恢复图三默认</button>
+              </div>
+            </div>
             <p class="deck-note">
               你可以先用内置示例图卡和字卡，也可以导入你自己的卡组 JSON（支持图片 URL 或 base64）。
             </p>
@@ -89,7 +113,10 @@
         <section class="panel draw-panel">
           <div class="draw-head">
             <h2>4. 抽卡区</h2>
-            <p id="spreadSummary"></p>
+            <div class="draw-head-right">
+              <p id="spreadSummary"></p>
+              <button id="immersiveBtn" class="btn btn-ghost">沉浸模式</button>
+            </div>
           </div>
 
           <div class="deck-zone">
@@ -134,6 +161,8 @@
           <div class="actions compact">
             <button id="saveNoteBtn" class="btn btn-primary">保存到本地记录</button>
             <button id="clearNoteBtn" class="btn btn-ghost">清空输入</button>
+            <button id="exportPngBtn" class="btn btn-ghost">导出复盘 PNG</button>
+            <button id="exportPdfBtn" class="btn btn-ghost">导出复盘 PDF</button>
           </div>
         </section>
 
@@ -152,7 +181,7 @@
         <button id="previewCloseBtn" class="preview-close" data-action="close" aria-label="关闭预览">×</button>
         <img id="previewImage" class="preview-image" alt="卡牌放大预览" />
         <div id="previewPairWrap" class="preview-pair-wrap" hidden>
-          <div class="preview-pair-viewport">
+          <div id="previewPairViewport" class="preview-pair-viewport">
             <div id="previewPairComposite" class="preview-pair-composite rot-0">
               <div class="preview-word-base">
                 <img id="previewPairWord" alt="字卡放大预览" />
@@ -163,10 +192,20 @@
             </div>
           </div>
         </div>
+        <div id="previewPairTools" class="preview-pair-tools" hidden>
+          <button id="previewRotateLeftBtn" class="preview-tool-btn" type="button" aria-label="逆时针旋转">↶</button>
+          <button id="previewRotateRightBtn" class="preview-tool-btn" type="button" aria-label="顺时针旋转">↷</button>
+          <label class="preview-sync-label" for="previewSyncRotation">
+            <input id="previewSyncRotation" type="checkbox" checked />
+            同步主卡方向
+          </label>
+          <p class="preview-gesture-tip">双指缩放 · 双击还原 · 左右滑动旋转</p>
+        </div>
         <p id="previewTitle" class="preview-title"></p>
       </div>
     </div>
 
+    <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
     <script src="./script.js"></script>
   </body>
 </html>
