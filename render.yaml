@@ -3,7 +3,7 @@ services:
     name: repair-12min
     runtime: static
     plan: free
-    branch: main
+    branch: codex/repair-12min
     autoDeploy: true
     buildCommand: "echo 'No build step for static HTML'"
     staticPublishPath: .
