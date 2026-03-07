@@ -26,6 +26,9 @@
         <p class="lead">
           一页内完成：设题 -> 抽卡 -> 描述 -> 联想 -> 探究 -> 行动。支持多种牌阵、动态抽卡动画、引导问题生成和复盘导出。
         </p>
+        <div class="actions compact">
+          <a class="btn btn-ghost header-link-btn" href="./nvc-couple.html">打开非暴力沟通练习板</a>
+        </div>
       </header>
 
       <main class="main-grid">
@@ -151,6 +154,18 @@
       <div class="preview-dialog">
         <button id="previewCloseBtn" class="preview-close" data-action="close" aria-label="关闭预览">×</button>
         <img id="previewImage" class="preview-image" alt="卡牌放大预览" />
+        <div id="previewPairWrap" class="preview-pair-wrap" hidden>
+          <div class="preview-pair-viewport">
+            <div id="previewPairStack" class="preview-pair-stack rot-0">
+              <div class="preview-pair-panel preview-pair-image-panel">
+                <img id="previewPairImage" alt="图卡放大预览" />
+              </div>
+              <div class="preview-pair-panel preview-pair-word-panel">
+                <img id="previewPairWord" alt="字卡放大预览" />
+              </div>
+            </div>
+          </div>
+        </div>
         <p id="previewTitle" class="preview-title"></p>
       </div>
     </div>
