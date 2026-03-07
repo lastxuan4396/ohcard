@@ -287,7 +287,7 @@ const refs = {
   previewCloseBtn: document.getElementById("previewCloseBtn"),
   previewImage: document.getElementById("previewImage"),
   previewPairWrap: document.getElementById("previewPairWrap"),
-  previewPairStack: document.getElementById("previewPairStack"),
+  previewPairComposite: document.getElementById("previewPairComposite"),
   previewPairImage: document.getElementById("previewPairImage"),
   previewPairWord: document.getElementById("previewPairWord"),
   previewTitle: document.getElementById("previewTitle")
@@ -653,40 +653,34 @@ function fillCardFront(front, card, slotLabel) {
     pairViewport.className = "pair-viewport";
     applyPairRotation(pairViewport, directionToQuarter(state.layoutDirection));
 
-    const pairStack = document.createElement("div");
-    pairStack.className = "pair-stack";
+    const pairComposite = document.createElement("div");
+    pairComposite.className = "pair-composite";
 
-    const imagePanel = document.createElement("div");
-    imagePanel.className = "pair-panel image-panel";
-    const image = document.createElement("img");
-    image.src = card.imageCard.image;
-    image.alt = card.imageCard.name;
-    image.loading = "lazy";
-    makePreviewableImage(image, `${card.imageCard.name}（图卡）`);
-    imagePanel.appendChild(image);
-
-    const wordPanel = document.createElement("div");
-    wordPanel.className = "pair-panel word-panel";
+    const wordBase = document.createElement("div");
+    wordBase.className = "pair-word-base";
     if (card.wordCard.image) {
       const wordImage = document.createElement("img");
       wordImage.src = card.wordCard.image;
       wordImage.alt = card.wordCard.name;
       wordImage.loading = "lazy";
-      makePreviewableImage(wordImage, `${card.wordCard.name}（字卡）`);
-      wordPanel.appendChild(wordImage);
+      wordBase.appendChild(wordImage);
     } else {
-      const wordTitle = document.createElement("p");
-      wordTitle.className = "word-title";
-      const glyph = card.wordCard.glyph ? `${card.wordCard.glyph} ` : "";
-      wordTitle.textContent = `${glyph}${card.wordCard.name}`;
-      const wordKey = document.createElement("p");
-      wordKey.className = "word-key";
-      wordKey.textContent = `字卡关键词：${(card.wordCard.keywords || []).join(" · ")}`;
-      wordPanel.append(wordTitle, wordKey);
+      const fallback = document.createElement("div");
+      fallback.className = "pair-word-fallback";
+      fallback.textContent = card.wordCard.name;
+      wordBase.appendChild(fallback);
     }
 
-    pairStack.append(imagePanel, wordPanel);
-    pairViewport.appendChild(pairStack);
+    const imageOverlay = document.createElement("div");
+    imageOverlay.className = "pair-image-overlay";
+    const image = document.createElement("img");
+    image.src = card.imageCard.image;
+    image.alt = card.imageCard.name;
+    image.loading = "lazy";
+    imageOverlay.appendChild(image);
+
+    pairComposite.append(wordBase, imageOverlay);
+    pairViewport.appendChild(pairComposite);
 
     const rotateControls = document.createElement("div");
     rotateControls.className = "pair-rotate-controls";
@@ -1497,8 +1491,8 @@ function openPairPreview(imageSrc, wordSrc, title, quarter) {
   setPreviewMode("pair");
   refs.previewPairImage.src = imageSrc;
   refs.previewPairWord.src = wordSrc;
-  refs.previewPairStack.classList.remove(...ROTATION_CLASSES);
-  refs.previewPairStack.classList.add(ROTATION_CLASSES[normalizeQuarter(quarter)]);
+  refs.previewPairComposite.classList.remove(...ROTATION_CLASSES);
+  refs.previewPairComposite.classList.add(ROTATION_CLASSES[normalizeQuarter(quarter)]);
   refs.previewTitle.textContent = title || "图卡 + 字卡";
   refs.imagePreviewModal.hidden = false;
   document.body.style.overflow = "hidden";
@@ -1510,8 +1504,8 @@ function closeImagePreview() {
   refs.previewImage.src = "";
   refs.previewPairImage.src = "";
   refs.previewPairWord.src = "";
-  refs.previewPairStack.classList.remove(...ROTATION_CLASSES);
-  refs.previewPairStack.classList.add("rot-0");
+  refs.previewPairComposite.classList.remove(...ROTATION_CLASSES);
+  refs.previewPairComposite.classList.add("rot-0");
   refs.previewTitle.textContent = "";
   document.body.style.overflow = "";
 }

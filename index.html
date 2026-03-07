@@ -151,6 +151,18 @@
       <div class="preview-dialog">
         <button id="previewCloseBtn" class="preview-close" data-action="close" aria-label="关闭预览">×</button>
         <img id="previewImage" class="preview-image" alt="卡牌放大预览" />
+        <div id="previewPairWrap" class="preview-pair-wrap" hidden>
+          <div class="preview-pair-viewport">
+            <div id="previewPairComposite" class="preview-pair-composite rot-0">
+              <div class="preview-word-base">
+                <img id="previewPairWord" alt="字卡放大预览" />
+              </div>
+              <div class="preview-image-overlay">
+                <img id="previewPairImage" alt="图卡放大预览" />
+              </div>
+            </div>
+          </div>
+        </div>
         <p id="previewTitle" class="preview-title"></p>
       </div>
     </div>
