@@ -90,13 +90,25 @@ const DECK_TYPES = {
 };
 
 const LAYOUT_DIRECTIONS = {
-  horizontal: {
-    name: "横向",
-    desc: "牌阵横向展开"
+  up: {
+    name: "上",
+    desc: "整体 0°",
+    rotationClass: "rot-0"
   },
-  vertical: {
-    name: "纵向",
-    desc: "牌阵纵向阅读"
+  right: {
+    name: "右",
+    desc: "整体 90°",
+    rotationClass: "rot-90"
+  },
+  down: {
+    name: "下",
+    desc: "整体 180°",
+    rotationClass: "rot-180"
+  },
+  left: {
+    name: "左",
+    desc: "整体 270°",
+    rotationClass: "rot-270"
   }
 };
 
@@ -274,7 +286,7 @@ const refs = {
 const state = {
   modeId: "focus",
   deckTypeId: "pair",
-  layoutDirection: "horizontal",
+  layoutDirection: "up",
   layerId: "description",
   drawVersion: 0,
   isDrawing: false,
@@ -573,14 +585,13 @@ function drawCards(count) {
 
 function renderSpread(cards, slotLabels) {
   refs.spreadBoard.className = "spread-board";
-  refs.spreadBoard.classList.add(`direction-${state.layoutDirection}`);
-  const cols = state.layoutDirection === "vertical" ? 1 : Math.min(cards.length, 5);
+  const cols = Math.min(cards.length, 5);
   refs.spreadBoard.classList.add(`cols-${cols}`);
   refs.spreadBoard.innerHTML = "";
 
   cards.forEach((card, index) => {
     const tile = document.createElement("article");
-    tile.className = "card-tile";
+    tile.className = `card-tile ${getCardKind(card)}-card`;
     tile.style.setProperty("--delay", `${index * 120}ms`);
 
     const back = document.createElement("div");
@@ -590,7 +601,7 @@ function renderSpread(cards, slotLabels) {
     back.appendChild(backLabel);
 
     const front = document.createElement("div");
-    front.className = `card-face card-front ${normalizeTone(card.tone)}`;
+    front.className = `card-face card-front ${normalizeTone(card.tone)} ${getCardKind(card)}-front`;
 
     fillCardFront(front, card, slotLabels[index] || `位置 ${index + 1}`);
 
@@ -614,39 +625,48 @@ function fillCardFront(front, card, slotLabel) {
     pairTitle.className = "card-title";
     pairTitle.textContent = `${card.imageCard.name} + ${card.wordCard.name}`;
 
-    const pairWrap = document.createElement("div");
-    pairWrap.className = `pair-wrap direction-${state.layoutDirection}`;
+    const pairViewport = document.createElement("div");
+    const rotationClass = (LAYOUT_DIRECTIONS[state.layoutDirection] || LAYOUT_DIRECTIONS.up).rotationClass;
+    pairViewport.className = `pair-viewport ${rotationClass}`;
 
-    const imageBlock = document.createElement("div");
-    imageBlock.className = "image-block";
+    const pairStack = document.createElement("div");
+    pairStack.className = "pair-stack";
+
+    const imagePanel = document.createElement("div");
+    imagePanel.className = "pair-panel image-panel";
     const image = document.createElement("img");
     image.src = card.imageCard.image;
     image.alt = card.imageCard.name;
     image.loading = "lazy";
-    imageBlock.appendChild(image);
+    imagePanel.appendChild(image);
 
-    const wordBlock = document.createElement("div");
-    wordBlock.className = "word-block";
-    const wordTitle = document.createElement("p");
-    wordTitle.className = "word-title";
-    const glyph = card.wordCard.glyph ? `${card.wordCard.glyph} ` : "";
-    wordTitle.textContent = `${glyph}${card.wordCard.name}`;
-    const wordKey = document.createElement("p");
-    wordKey.className = "word-key";
-    wordKey.textContent = `字卡关键词：${(card.wordCard.keywords || []).join(" · ")}`;
-    wordBlock.append(wordTitle, wordKey);
+    const wordPanel = document.createElement("div");
+    wordPanel.className = "pair-panel word-panel";
+    if (card.wordCard.image) {
+      const wordImage = document.createElement("img");
+      wordImage.src = card.wordCard.image;
+      wordImage.alt = card.wordCard.name;
+      wordImage.loading = "lazy";
+      wordPanel.appendChild(wordImage);
+    } else {
+      const wordTitle = document.createElement("p");
+      wordTitle.className = "word-title";
+      const glyph = card.wordCard.glyph ? `${card.wordCard.glyph} ` : "";
+      wordTitle.textContent = `${glyph}${card.wordCard.name}`;
+      const wordKey = document.createElement("p");
+      wordKey.className = "word-key";
+      wordKey.textContent = `字卡关键词：${(card.wordCard.keywords || []).join(" · ")}`;
+      wordPanel.append(wordTitle, wordKey);
+    }
 
-    pairWrap.append(imageBlock, wordBlock);
-
-    const meta = document.createElement("p");
-    meta.className = "card-meta";
-    meta.textContent = `图卡关键词：${(card.imageCard.keywords || []).join(" · ")}`;
+    pairStack.append(imagePanel, wordPanel);
+    pairViewport.appendChild(pairStack);
 
     const line = document.createElement("p");
     line.className = "card-line";
     line.textContent = card.cue || "把图卡和字卡放在一起，说说它们共同指向了什么。";
 
-    front.append(pairTitle, pairWrap, meta, line);
+    front.append(pairTitle, pairViewport, line);
     return;
   }
 
@@ -679,6 +699,23 @@ function fillCardFront(front, card, slotLabel) {
   title.className = "card-title";
   const glyph = card.glyph ? `${card.glyph} ` : "";
   title.textContent = `${glyph}${card.name}`;
+
+  if (card.image) {
+    const wordImageBlock = document.createElement("div");
+    wordImageBlock.className = "image-block word-image-block";
+    const image = document.createElement("img");
+    image.src = card.image;
+    image.alt = card.name;
+    image.loading = "lazy";
+    wordImageBlock.appendChild(image);
+
+    const line = document.createElement("p");
+    line.className = "card-line";
+    line.textContent = card.cue || "说说这个词触发了你怎样的联想。";
+
+    front.append(title, wordImageBlock, line);
+    return;
+  }
 
   const meta = document.createElement("p");
   meta.className = "card-meta";
@@ -768,7 +805,7 @@ function renderHistory() {
     item.className = "history-item";
     const mode = MODES[session.modeId];
     const deckType = DECK_TYPES[session.deckTypeId] || DECK_TYPES[inferDeckTypeFromCards(session.cards)] || DECK_TYPES.word;
-    const layoutDirection = LAYOUT_DIRECTIONS[session.layoutDirection] || LAYOUT_DIRECTIONS.horizontal;
+    const layoutDirection = LAYOUT_DIRECTIONS[session.layoutDirection] || LAYOUT_DIRECTIONS.up;
 
     const time = new Date(session.time);
     const localTime = `${time.getFullYear()}-${pad2(time.getMonth() + 1)}-${pad2(time.getDate())} ${pad2(
@@ -811,7 +848,7 @@ function handleHistoryAction(event) {
     }
     state.modeId = session.modeId in MODES ? session.modeId : "focus";
     state.deckTypeId = session.deckTypeId in DECK_TYPES ? session.deckTypeId : inferDeckTypeFromCards(session.cards);
-    state.layoutDirection = session.layoutDirection in LAYOUT_DIRECTIONS ? session.layoutDirection : "horizontal";
+    state.layoutDirection = session.layoutDirection in LAYOUT_DIRECTIONS ? session.layoutDirection : "up";
     state.currentSession = session;
     state.currentCards = session.cards || [];
     state.layerId = "description";
@@ -1056,7 +1093,12 @@ function hydrateCustomDecks() {
 }
 
 async function autoLoadBundledDecks() {
-  if (state.deckSource.word === "custom" || state.deckSource.image === "custom") {
+  const hasCustomWordImages =
+    state.deckSource.word === "custom" && state.wordDeck.filter((card) => card && card.image).length >= 5;
+  const hasCustomImageCards =
+    state.deckSource.image === "custom" && state.imageDeck.filter((card) => card && card.image).length >= 5;
+
+  if (hasCustomWordImages && hasCustomImageCards) {
     return;
   }
 
@@ -1072,13 +1114,13 @@ async function autoLoadBundledDecks() {
 
     let changed = false;
 
-    if (imageDeck.length >= 5) {
+    if (imageDeck.length >= 5 && !hasCustomImageCards) {
       state.imageDeck = imageDeck;
       state.deckSource.image = "bundled";
       changed = true;
     }
 
-    if (wordDeck.length >= 5) {
+    if (wordDeck.length >= 5 && !hasCustomWordImages) {
       state.wordDeck = wordDeck;
       state.deckSource.word = "bundled";
       changed = true;
@@ -1116,6 +1158,7 @@ function normalizeWordCard(input) {
   return {
     name,
     glyph: typeof input.glyph === "string" ? input.glyph.trim().slice(0, 4) : "",
+    image: typeof input.image === "string" ? input.image.trim() : "",
     tone: normalizeTone(input.tone),
     keywords: normalizeKeywords(input.keywords, ["联想"]),
     cue: typeof input.cue === "string" ? input.cue.trim() : ""
