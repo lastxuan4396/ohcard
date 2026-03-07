@@ -282,7 +282,11 @@ const refs = {
   playbookGrid: document.getElementById("playbookGrid"),
   timerMinutes: document.getElementById("timerMinutes"),
   timerToggle: document.getElementById("timerToggle"),
-  timerText: document.getElementById("timerText")
+  timerText: document.getElementById("timerText"),
+  imagePreviewModal: document.getElementById("imagePreviewModal"),
+  previewCloseBtn: document.getElementById("previewCloseBtn"),
+  previewImage: document.getElementById("previewImage"),
+  previewTitle: document.getElementById("previewTitle")
 };
 
 const state = {
@@ -373,6 +377,7 @@ function bindEvents() {
   refs.clearHistoryBtn.addEventListener("click", clearHistory);
   refs.historyList.addEventListener("click", handleHistoryAction);
   refs.deck.addEventListener("click", runDraw);
+  refs.spreadBoard.addEventListener("click", handlePreviewImageClick);
   refs.timerToggle.addEventListener("click", toggleTimer);
 
   refs.importImageDeckBtn.addEventListener("click", () => {
@@ -390,6 +395,19 @@ function bindEvents() {
     event.target.value = "";
   });
   refs.resetDeckBtn.addEventListener("click", resetDecksToBuiltIn);
+
+  refs.previewCloseBtn.addEventListener("click", closeImagePreview);
+  refs.imagePreviewModal.addEventListener("click", (event) => {
+    if (event.target === refs.imagePreviewModal || event.target.dataset.action === "close") {
+      closeImagePreview();
+    }
+  });
+
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape" && !refs.imagePreviewModal.hidden) {
+      closeImagePreview();
+    }
+  });
 }
 
 function renderModeSwitch() {
@@ -640,6 +658,7 @@ function fillCardFront(front, card, slotLabel) {
     image.src = card.imageCard.image;
     image.alt = card.imageCard.name;
     image.loading = "lazy";
+    makePreviewableImage(image, `${card.imageCard.name}（图卡）`);
     imagePanel.appendChild(image);
 
     const wordPanel = document.createElement("div");
@@ -649,6 +668,7 @@ function fillCardFront(front, card, slotLabel) {
       wordImage.src = card.wordCard.image;
       wordImage.alt = card.wordCard.name;
       wordImage.loading = "lazy";
+      makePreviewableImage(wordImage, `${card.wordCard.name}（字卡）`);
       wordPanel.appendChild(wordImage);
     } else {
       const wordTitle = document.createElement("p");
@@ -710,6 +730,7 @@ function fillCardFront(front, card, slotLabel) {
     image.src = card.image;
     image.alt = card.name;
     image.loading = "lazy";
+    makePreviewableImage(image, `${card.name}（图卡）`);
     imageBlock.appendChild(image);
 
     const meta = document.createElement("p");
@@ -736,6 +757,7 @@ function fillCardFront(front, card, slotLabel) {
     image.src = card.image;
     image.alt = card.name;
     image.loading = "lazy";
+    makePreviewableImage(image, `${card.name}（字卡）`);
     wordImageBlock.appendChild(image);
 
     const line = document.createElement("p");
@@ -1406,6 +1428,41 @@ function applyPairRotation(viewport, quarter) {
 function rotatePairViewport(viewport, deltaQuarter) {
   const current = Number(viewport.dataset.rotationQuarter || 0);
   applyPairRotation(viewport, current + Number(deltaQuarter || 0));
+}
+
+function makePreviewableImage(imageElement, titleText) {
+  if (!imageElement) {
+    return;
+  }
+  imageElement.classList.add("previewable-image");
+  imageElement.dataset.previewSrc = imageElement.src || "";
+  imageElement.dataset.previewTitle = titleText || imageElement.alt || "";
+}
+
+function handlePreviewImageClick(event) {
+  const image = event.target.closest("img.previewable-image");
+  if (!image) {
+    return;
+  }
+  openImagePreview(image.dataset.previewSrc || image.currentSrc || image.src, image.dataset.previewTitle || image.alt || "");
+}
+
+function openImagePreview(src, title) {
+  if (!src) {
+    return;
+  }
+  refs.previewImage.src = src;
+  refs.previewImage.alt = title || "卡牌放大预览";
+  refs.previewTitle.textContent = title || "";
+  refs.imagePreviewModal.hidden = false;
+  document.body.style.overflow = "hidden";
+}
+
+function closeImagePreview() {
+  refs.imagePreviewModal.hidden = true;
+  refs.previewImage.src = "";
+  refs.previewTitle.textContent = "";
+  document.body.style.overflow = "";
 }
 
 function uniqueValues(list) {
