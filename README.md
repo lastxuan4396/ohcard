@@ -15,17 +15,6 @@
    - `python3 -m http.server 8080`
    - 浏览器访问 `http://localhost:8080`
 
-## Render 部署（GitHub + Render）
-本项目已包含 `render.yaml`，推送到 GitHub 后可直接在 Render 创建 Blueprint：
-
-1. 将仓库推送到 GitHub（当前仓库远程：`origin`）。
-2. 打开 Render Dashboard -> New -> Blueprint。
-3. 选择该 GitHub 仓库并确认 `render.yaml`。
-4. 点击 Deploy。
-
-部署后主页：`/index.html`  
-NVC 页面：`/nvc-couple.html`
-
 ## 文件说明
 - `index.html`: 页面结构
 - `styles.css`: 页面视觉与动画

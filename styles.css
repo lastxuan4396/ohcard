@@ -352,12 +352,6 @@ input[type="number"]:focus {
   color: var(--danger);
 }
 
-.header-link-btn {
-  display: inline-flex;
-  align-items: center;
-  text-decoration: none;
-}
-
 .timer-wrap {
   margin-top: 14px;
   padding: 10px 12px;
