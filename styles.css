@@ -544,7 +544,7 @@ input[type="number"]:focus {
 }
 
 .card-tile.pair-card {
-  min-height: clamp(460px, 50vw, 560px);
+  min-height: clamp(640px, 70vh, 880px);
 }
 
 .card-tile.image-card {
@@ -653,7 +653,7 @@ input[type="number"]:focus {
 
 .pair-viewport {
   width: 100%;
-  aspect-ratio: 1 / 1;
+  min-height: 500px;
   border-radius: 12px;
   background: rgba(255, 255, 255, 0.6);
   border: 1px solid rgba(121, 97, 70, 0.2);
@@ -663,11 +663,11 @@ input[type="number"]:focus {
 }
 
 .pair-stack {
-  width: 86%;
-  height: 95%;
+  width: 92%;
+  height: 94%;
   display: grid;
-  grid-template-rows: 2.1fr 1fr;
-  gap: 8px;
+  grid-template-rows: 1fr 1fr;
+  gap: 10px;
   transition: transform 0.35s ease;
   transform-origin: center;
 }
@@ -677,7 +677,7 @@ input[type="number"]:focus {
 }
 
 .pair-viewport.rot-90 .pair-stack {
-  transform: rotate(90deg) scale(0.84);
+  transform: rotate(90deg) scale(0.72);
 }
 
 .pair-viewport.rot-180 .pair-stack {
@@ -685,7 +685,7 @@ input[type="number"]:focus {
 }
 
 .pair-viewport.rot-270 .pair-stack {
-  transform: rotate(270deg) scale(0.84);
+  transform: rotate(270deg) scale(0.72);
 }
 
 .pair-panel {
@@ -702,6 +702,35 @@ input[type="number"]:focus {
   height: 100%;
   object-fit: contain;
   display: block;
+}
+
+.pair-interactive {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+}
+
+.pair-rotate-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.pair-rotate-btn {
+  width: 40px;
+  height: 40px;
+  border-radius: 999px;
+  border: 1px solid rgba(112, 86, 60, 0.32);
+  background: rgba(255, 255, 255, 0.88);
+  color: #5b4631;
+  font-size: 19px;
+  cursor: pointer;
+  box-shadow: 0 6px 12px rgba(57, 40, 23, 0.1);
+}
+
+.pair-rotate-btn:hover {
+  border-color: rgba(46, 111, 103, 0.5);
 }
 
 .image-block {
@@ -915,15 +944,29 @@ input[type="number"]:focus {
   }
 
   .card-tile.pair-card {
-    min-height: 440px;
+    min-height: 560px;
   }
 
   .pair-viewport.rot-90 .pair-stack {
-    transform: rotate(90deg) scale(0.8);
+    transform: rotate(90deg) scale(0.68);
   }
 
   .pair-viewport.rot-270 .pair-stack {
-    transform: rotate(270deg) scale(0.8);
+    transform: rotate(270deg) scale(0.68);
+  }
+
+  .pair-viewport {
+    min-height: 430px;
+  }
+
+  .pair-interactive {
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 8px;
+  }
+
+  .pair-rotate-btn {
+    width: 36px;
+    height: 36px;
   }
 
   .spread-board.cols-3,

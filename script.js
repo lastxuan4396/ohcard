@@ -112,6 +112,8 @@ const LAYOUT_DIRECTIONS = {
   }
 };
 
+const ROTATION_CLASSES = ["rot-0", "rot-90", "rot-180", "rot-270"];
+
 const PROMPT_LAYERS = [
   {
     id: "description",
@@ -626,8 +628,8 @@ function fillCardFront(front, card, slotLabel) {
     pairTitle.textContent = `${card.imageCard.name} + ${card.wordCard.name}`;
 
     const pairViewport = document.createElement("div");
-    const rotationClass = (LAYOUT_DIRECTIONS[state.layoutDirection] || LAYOUT_DIRECTIONS.up).rotationClass;
-    pairViewport.className = `pair-viewport ${rotationClass}`;
+    pairViewport.className = "pair-viewport";
+    applyPairRotation(pairViewport, directionToQuarter(state.layoutDirection));
 
     const pairStack = document.createElement("div");
     pairStack.className = "pair-stack";
@@ -662,11 +664,38 @@ function fillCardFront(front, card, slotLabel) {
     pairStack.append(imagePanel, wordPanel);
     pairViewport.appendChild(pairStack);
 
+    const rotateControls = document.createElement("div");
+    rotateControls.className = "pair-rotate-controls";
+
+    const rotateLeftBtn = document.createElement("button");
+    rotateLeftBtn.type = "button";
+    rotateLeftBtn.className = "pair-rotate-btn";
+    rotateLeftBtn.textContent = "↶";
+    rotateLeftBtn.title = "逆时针旋转";
+    rotateLeftBtn.addEventListener("click", () => {
+      rotatePairViewport(pairViewport, -1);
+    });
+
+    const rotateRightBtn = document.createElement("button");
+    rotateRightBtn.type = "button";
+    rotateRightBtn.className = "pair-rotate-btn";
+    rotateRightBtn.textContent = "↷";
+    rotateRightBtn.title = "顺时针旋转";
+    rotateRightBtn.addEventListener("click", () => {
+      rotatePairViewport(pairViewport, 1);
+    });
+
+    rotateControls.append(rotateLeftBtn, rotateRightBtn);
+
+    const pairInteractive = document.createElement("div");
+    pairInteractive.className = "pair-interactive";
+    pairInteractive.append(pairViewport, rotateControls);
+
     const line = document.createElement("p");
     line.className = "card-line";
     line.textContent = card.cue || "把图卡和字卡放在一起，说说它们共同指向了什么。";
 
-    front.append(pairTitle, pairViewport, line);
+    front.append(pairTitle, pairInteractive, line);
     return;
   }
 
@@ -1348,6 +1377,35 @@ function inferDeckTypeFromCards(cards) {
     return "image";
   }
   return "word";
+}
+
+function directionToQuarter(directionId) {
+  if (directionId === "right") {
+    return 1;
+  }
+  if (directionId === "down") {
+    return 2;
+  }
+  if (directionId === "left") {
+    return 3;
+  }
+  return 0;
+}
+
+function normalizeQuarter(value) {
+  return ((Number(value) % 4) + 4) % 4;
+}
+
+function applyPairRotation(viewport, quarter) {
+  const normalized = normalizeQuarter(quarter);
+  viewport.dataset.rotationQuarter = String(normalized);
+  viewport.classList.remove(...ROTATION_CLASSES);
+  viewport.classList.add(ROTATION_CLASSES[normalized]);
+}
+
+function rotatePairViewport(viewport, deltaQuarter) {
+  const current = Number(viewport.dataset.rotationQuarter || 0);
+  applyPairRotation(viewport, current + Number(deltaQuarter || 0));
 }
 
 function uniqueValues(list) {
