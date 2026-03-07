@@ -286,6 +286,10 @@ const refs = {
   imagePreviewModal: document.getElementById("imagePreviewModal"),
   previewCloseBtn: document.getElementById("previewCloseBtn"),
   previewImage: document.getElementById("previewImage"),
+  previewPairWrap: document.getElementById("previewPairWrap"),
+  previewPairStack: document.getElementById("previewPairStack"),
+  previewPairImage: document.getElementById("previewPairImage"),
+  previewPairWord: document.getElementById("previewPairWord"),
   previewTitle: document.getElementById("previewTitle")
 };
 
@@ -709,6 +713,9 @@ function fillCardFront(front, card, slotLabel) {
 
     const pairInteractive = document.createElement("div");
     pairInteractive.className = "pair-interactive";
+    pairInteractive.dataset.previewImageSrc = card.imageCard.image || "";
+    pairInteractive.dataset.previewWordSrc = card.wordCard.image || "";
+    pairInteractive.dataset.previewTitle = `${card.imageCard.name} + ${card.wordCard.name}`;
     pairInteractive.append(pairViewport, rotateControls);
 
     const line = document.createElement("p");
@@ -1440,6 +1447,23 @@ function makePreviewableImage(imageElement, titleText) {
 }
 
 function handlePreviewImageClick(event) {
+  if (event.target.closest(".pair-rotate-btn")) {
+    return;
+  }
+
+  const pairInteractive = event.target.closest(".pair-interactive");
+  if (pairInteractive) {
+    const imageSrc = pairInteractive.dataset.previewImageSrc || "";
+    const wordSrc = pairInteractive.dataset.previewWordSrc || "";
+    const title = pairInteractive.dataset.previewTitle || "";
+    const viewport = pairInteractive.querySelector(".pair-viewport");
+    const quarter = normalizeQuarter(Number(viewport?.dataset.rotationQuarter || 0));
+    if (imageSrc && wordSrc) {
+      openPairPreview(imageSrc, wordSrc, title, quarter);
+      return;
+    }
+  }
+
   const image = event.target.closest("img.previewable-image");
   if (!image) {
     return;
@@ -1447,10 +1471,17 @@ function handlePreviewImageClick(event) {
   openImagePreview(image.dataset.previewSrc || image.currentSrc || image.src, image.dataset.previewTitle || image.alt || "");
 }
 
+function setPreviewMode(mode) {
+  const isPair = mode === "pair";
+  refs.previewImage.hidden = isPair;
+  refs.previewPairWrap.hidden = !isPair;
+}
+
 function openImagePreview(src, title) {
   if (!src) {
     return;
   }
+  setPreviewMode("single");
   refs.previewImage.src = src;
   refs.previewImage.alt = title || "卡牌放大预览";
   refs.previewTitle.textContent = title || "";
@@ -1458,9 +1489,29 @@ function openImagePreview(src, title) {
   document.body.style.overflow = "hidden";
 }
 
+function openPairPreview(imageSrc, wordSrc, title, quarter) {
+  if (!imageSrc || !wordSrc) {
+    openImagePreview(imageSrc || wordSrc, title);
+    return;
+  }
+  setPreviewMode("pair");
+  refs.previewPairImage.src = imageSrc;
+  refs.previewPairWord.src = wordSrc;
+  refs.previewPairStack.classList.remove(...ROTATION_CLASSES);
+  refs.previewPairStack.classList.add(ROTATION_CLASSES[normalizeQuarter(quarter)]);
+  refs.previewTitle.textContent = title || "图卡 + 字卡";
+  refs.imagePreviewModal.hidden = false;
+  document.body.style.overflow = "hidden";
+}
+
 function closeImagePreview() {
   refs.imagePreviewModal.hidden = true;
+  setPreviewMode("single");
   refs.previewImage.src = "";
+  refs.previewPairImage.src = "";
+  refs.previewPairWord.src = "";
+  refs.previewPairStack.classList.remove(...ROTATION_CLASSES);
+  refs.previewPairStack.classList.add("rot-0");
   refs.previewTitle.textContent = "";
   document.body.style.overflow = "";
 }

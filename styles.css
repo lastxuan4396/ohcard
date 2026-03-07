@@ -550,7 +550,7 @@ input[type="number"]:focus {
 }
 
 .card-tile.pair-card {
-  min-height: clamp(940px, 92vh, 1220px);
+  min-height: clamp(1140px, 112vh, 1480px);
 }
 
 .card-tile.image-card {
@@ -659,7 +659,7 @@ input[type="number"]:focus {
 
 .pair-viewport {
   width: 100%;
-  height: clamp(680px, 74vh, 920px);
+  height: clamp(1000px, 96vh, 1260px);
   border-radius: 14px;
   background: rgba(255, 255, 255, 0.6);
   border: 1px solid rgba(121, 97, 70, 0.2);
@@ -672,14 +672,11 @@ input[type="number"]:focus {
 }
 
 .pair-stack {
-  width: auto;
+  width: min(100%, 450px);
   height: 100%;
-  aspect-ratio: 0.67;
-  max-width: 100%;
   position: relative;
   transition: transform 0.32s ease;
   transform-origin: center;
-  overflow: visible;
 }
 
 .pair-viewport.rot-0 .pair-stack {
@@ -687,7 +684,7 @@ input[type="number"]:focus {
 }
 
 .pair-viewport.rot-90 .pair-stack {
-  transform: rotate(90deg) scale(0.74);
+  transform: rotate(90deg) scale(0.48);
 }
 
 .pair-viewport.rot-180 .pair-stack {
@@ -695,14 +692,14 @@ input[type="number"]:focus {
 }
 
 .pair-viewport.rot-270 .pair-stack {
-  transform: rotate(270deg) scale(0.74);
+  transform: rotate(270deg) scale(0.48);
 }
 
 .pair-panel {
   position: absolute;
   left: 50%;
   transform: translateX(-50%);
-  width: 98%;
+  width: 100%;
   aspect-ratio: 0.67;
   border-radius: 10px;
   border: 1px solid rgba(116, 91, 63, 0.25);
@@ -717,7 +714,7 @@ input[type="number"]:focus {
 }
 
 .word-panel {
-  top: 72%;
+  top: 33%;
   z-index: 1;
 }
 
@@ -798,6 +795,7 @@ input[type="number"]:focus {
   box-shadow: 0 26px 44px rgba(0, 0, 0, 0.36);
   position: relative;
   padding: 12px 12px 10px;
+  overflow: auto;
 }
 
 .preview-image {
@@ -807,6 +805,85 @@ input[type="number"]:focus {
   border-radius: 12px;
   display: block;
   background: #fff;
+}
+
+.preview-pair-wrap {
+  width: 100%;
+}
+
+.preview-pair-wrap[hidden] {
+  display: none;
+}
+
+.preview-pair-viewport {
+  width: min(88vw, 780px);
+  height: auto;
+  margin: 0 auto;
+  border-radius: 12px;
+  background: #f4f2ee;
+  border: 1px solid rgba(86, 73, 60, 0.24);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 12px;
+  overflow: hidden;
+}
+
+.preview-pair-stack {
+  width: min(100%, 430px);
+  height: 960px;
+  position: relative;
+  transition: transform 0.28s ease;
+  transform-origin: center;
+}
+
+.preview-pair-panel {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 100%;
+  aspect-ratio: 0.67;
+  border-radius: 10px;
+  border: 1px solid rgba(116, 91, 63, 0.28);
+  background: #fff;
+  overflow: hidden;
+  box-shadow: 0 10px 22px rgba(48, 35, 23, 0.16);
+}
+
+.preview-pair-image-panel {
+  top: 0;
+  z-index: 2;
+}
+
+.preview-pair-word-panel {
+  top: 33%;
+  z-index: 1;
+}
+
+.preview-pair-panel img {
+  position: absolute;
+  inset: 8px;
+  width: calc(100% - 16px);
+  height: calc(100% - 16px);
+  object-fit: contain;
+  background: #fff;
+  border-radius: 10px;
+}
+
+.preview-pair-stack.rot-0 {
+  transform: rotate(0deg) scale(1);
+}
+
+.preview-pair-stack.rot-90 {
+  transform: rotate(90deg) scale(0.48);
+}
+
+.preview-pair-stack.rot-180 {
+  transform: rotate(180deg) scale(1);
+}
+
+.preview-pair-stack.rot-270 {
+  transform: rotate(270deg) scale(0.48);
 }
 
 .preview-title {
@@ -1041,30 +1118,48 @@ input[type="number"]:focus {
   }
 
   .card-tile.pair-card {
-    min-height: 860px;
+    min-height: 1040px;
   }
 
   .pair-viewport.rot-90 .pair-stack {
-    transform: rotate(90deg) scale(0.68);
+    transform: rotate(90deg) scale(0.44);
   }
 
   .pair-viewport.rot-270 .pair-stack {
-    transform: rotate(270deg) scale(0.68);
+    transform: rotate(270deg) scale(0.44);
   }
 
   .pair-viewport {
-    height: 660px;
+    height: 900px;
     padding: 10px 70px 10px 10px;
   }
 
   .pair-interactive {
-    min-height: 660px;
+    min-height: 900px;
   }
 
   .pair-rotate-btn {
     width: 44px;
     height: 44px;
     font-size: 24px;
+  }
+
+  .preview-pair-viewport {
+    width: min(94vw, 620px);
+    height: auto;
+  }
+
+  .preview-pair-stack {
+    width: min(100%, 360px);
+    height: 820px;
+  }
+
+  .preview-pair-stack.rot-90 {
+    transform: rotate(90deg) scale(0.38);
+  }
+
+  .preview-pair-stack.rot-270 {
+    transform: rotate(270deg) scale(0.38);
   }
 
   .spread-board.cols-3,
