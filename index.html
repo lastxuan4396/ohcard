@@ -27,6 +27,10 @@
           一页内完成：设题 -> 抽卡 -> 描述 -> 联想 -> 探究 -> 行动。支持多种牌阵、动态抽卡动画、引导问题生成和复盘导出。
         </p>
       </header>
+      <section class="panel workflow-panel">
+        <h2>流程进度</h2>
+        <div id="workflowSteps" class="workflow-steps"></div>
+      </section>
 
       <main class="main-grid">
         <section class="panel control-panel">
@@ -86,6 +90,11 @@
             </div>
             <input id="importImageDeckInput" type="file" accept=".json,application/json" hidden />
             <input id="importWordDeckInput" type="file" accept=".json,application/json" hidden />
+            <div class="deck-validator">
+              <h3>6. 卡包校验</h3>
+              <p id="deckValidationSummary" class="deck-note">导入后会自动检查重名、缺图、尺寸异常。</p>
+              <ul id="deckValidationList" class="deck-validation-list"></ul>
+            </div>
           </div>
 
           <div class="actions">
@@ -164,6 +173,14 @@
             <button id="exportPngBtn" class="btn btn-ghost">导出复盘 PNG</button>
             <button id="exportPdfBtn" class="btn btn-ghost">导出复盘 PDF</button>
           </div>
+          <div class="replay-assistant">
+            <div class="replay-assistant-head">
+              <h3>复盘助手</h3>
+              <button id="regenActionPlanBtn" class="btn btn-ghost">重新生成建议</button>
+            </div>
+            <p id="autoSummaryText" class="auto-summary-text">抽卡后自动生成总结与行动建议。</p>
+            <ul id="actionChecklist" class="action-checklist"></ul>
+          </div>
         </section>
 
         <section class="panel history-panel">
@@ -193,13 +210,14 @@
           </div>
         </div>
         <div id="previewPairTools" class="preview-pair-tools" hidden>
+          <button id="previewFitToggleBtn" class="preview-tool-btn preview-fit-btn" type="button" aria-label="切换全图与适配">全图</button>
           <button id="previewRotateLeftBtn" class="preview-tool-btn" type="button" aria-label="逆时针旋转">↶</button>
           <button id="previewRotateRightBtn" class="preview-tool-btn" type="button" aria-label="顺时针旋转">↷</button>
           <label class="preview-sync-label" for="previewSyncRotation">
             <input id="previewSyncRotation" type="checkbox" checked />
             同步主卡方向
           </label>
-          <p class="preview-gesture-tip">双指缩放 · 双击还原 · 左右滑动旋转</p>
+          <p class="preview-gesture-tip">双指缩放 · 双击还原 · 左右滑动旋转 · 长按临时放大</p>
         </div>
         <p id="previewTitle" class="preview-title"></p>
       </div>

@@ -113,6 +113,15 @@ const LAYOUT_DIRECTIONS = {
 };
 
 const ROTATION_CLASSES = ["rot-0", "rot-90", "rot-180", "rot-270"];
+const COMPOSITE_BASE_RATIO = 1045 / 1312;
+
+const WORKFLOW_STEPS = [
+  { id: "question", name: "设题" },
+  { id: "draw", name: "抽卡" },
+  { id: "guide", name: "引导" },
+  { id: "note", name: "记录" },
+  { id: "export", name: "导出" }
+];
 
 const PROMPT_LAYERS = [
   {
@@ -262,6 +271,7 @@ const refs = {
   questionInput: document.getElementById("questionInput"),
   modeBadge: document.getElementById("modeBadge"),
   modeSwitch: document.getElementById("modeSwitch"),
+  workflowSteps: document.getElementById("workflowSteps"),
   deckTypeSwitch: document.getElementById("deckTypeSwitch"),
   layoutDirectionSwitch: document.getElementById("layoutDirectionSwitch"),
   deckStatus: document.getElementById("deckStatus"),
@@ -278,6 +288,8 @@ const refs = {
   importWordDeckBtn: document.getElementById("importWordDeckBtn"),
   importImageDeckInput: document.getElementById("importImageDeckInput"),
   importWordDeckInput: document.getElementById("importWordDeckInput"),
+  deckValidationSummary: document.getElementById("deckValidationSummary"),
+  deckValidationList: document.getElementById("deckValidationList"),
   resetDeckBtn: document.getElementById("resetDeckBtn"),
   drawBtn: document.getElementById("drawBtn"),
   reshuffleBtn: document.getElementById("reshuffleBtn"),
@@ -297,6 +309,9 @@ const refs = {
   clearNoteBtn: document.getElementById("clearNoteBtn"),
   exportPngBtn: document.getElementById("exportPngBtn"),
   exportPdfBtn: document.getElementById("exportPdfBtn"),
+  regenActionPlanBtn: document.getElementById("regenActionPlanBtn"),
+  autoSummaryText: document.getElementById("autoSummaryText"),
+  actionChecklist: document.getElementById("actionChecklist"),
   historyList: document.getElementById("historyList"),
   clearHistoryBtn: document.getElementById("clearHistoryBtn"),
   playbookGrid: document.getElementById("playbookGrid"),
@@ -312,6 +327,7 @@ const refs = {
   previewPairImage: document.getElementById("previewPairImage"),
   previewPairWord: document.getElementById("previewPairWord"),
   previewPairTools: document.getElementById("previewPairTools"),
+  previewFitToggleBtn: document.getElementById("previewFitToggleBtn"),
   previewRotateLeftBtn: document.getElementById("previewRotateLeftBtn"),
   previewRotateRightBtn: document.getElementById("previewRotateRightBtn"),
   previewSyncRotation: document.getElementById("previewSyncRotation"),
@@ -337,8 +353,13 @@ const state = {
   overlayTune: { ...DEFAULT_OVERLAY_TUNE },
   immersive: false,
   previewSourceViewport: null,
+  previewFitMode: "fit",
   preloadedImageUrls: new Set(),
+  preloadedImageTasks: new Map(),
+  thumbnailCache: new Map(),
   bundledWebpAvailable: false,
+  viewportFitTick: 0,
+  deckValidation: { summary: "等待导入卡包后校验。", items: [] },
   timer: {
     duration: 180,
     remaining: 180,
@@ -361,16 +382,29 @@ function init() {
   renderPromptTabs();
   renderPlaybook();
   renderHistory();
+  renderWorkflowSteps();
+  renderActionPlan();
+  renderDeckValidation();
   applyOverlayTuneToElement(refs.previewPairComposite);
   setSummary("已启用图卡 + 字卡玩法。你可以直接抽，也可以先导入自己的卡组。", false);
   bindEvents();
   updateTimerDisplay();
   autoLoadBundledDecks();
   setupPreviewPairGestures();
+  setupPreviewPressZoom();
   warmupPreload();
+  window.addEventListener("resize", scheduleRefreshViewportFits);
 }
 
 function bindEvents() {
+  refs.questionInput.addEventListener("input", () => {
+    if (state.currentSession) {
+      state.currentSession.question = refs.questionInput.value.trim();
+      syncCurrentSessionToHistory();
+    }
+    renderWorkflowSteps();
+  });
+
   refs.modeSwitch.addEventListener("click", (event) => {
     const button = event.target.closest("button[data-mode]");
     if (!button) {
@@ -411,9 +445,15 @@ function bindEvents() {
   refs.saveNoteBtn.addEventListener("click", saveCurrentNote);
   refs.clearNoteBtn.addEventListener("click", () => {
     refs.noteInput.value = "";
+    renderWorkflowSteps();
+  });
+  refs.noteInput.addEventListener("input", () => {
+    renderWorkflowSteps();
   });
   refs.exportPngBtn.addEventListener("click", () => exportSessionAsset("png"));
   refs.exportPdfBtn.addEventListener("click", () => exportSessionAsset("pdf"));
+  refs.regenActionPlanBtn.addEventListener("click", regenerateActionPlan);
+  refs.actionChecklist.addEventListener("change", handleActionChecklistChange);
   refs.copyReportBtn.addEventListener("click", copyCurrentReport);
   refs.clearHistoryBtn.addEventListener("click", clearHistory);
   refs.historyList.addEventListener("click", handleHistoryAction);
@@ -445,6 +485,9 @@ function bindEvents() {
   refs.resetDeckBtn.addEventListener("click", resetDecksToBuiltIn);
 
   refs.previewCloseBtn.addEventListener("click", closeImagePreview);
+  refs.previewFitToggleBtn.addEventListener("click", () => {
+    togglePreviewFitMode();
+  });
   refs.previewRotateLeftBtn.addEventListener("click", () => rotatePreviewPair(-1));
   refs.previewRotateRightBtn.addEventListener("click", () => rotatePreviewPair(1));
   refs.imagePreviewModal.addEventListener("click", (event) => {
@@ -511,6 +554,196 @@ function renderDeckStatus() {
   refs.deckStatus.textContent = `字卡 ${state.wordDeck.length} 张（${wordSource}） / 图卡 ${state.imageDeck.length} 张（${imageSource}）`;
 }
 
+function renderWorkflowSteps() {
+  refs.workflowSteps.innerHTML = "";
+  const hasQuestion = refs.questionInput.value.trim().length > 0;
+  const hasDraw = state.currentCards.length > 0;
+  const hasGuide = hasDraw && refs.promptList.querySelector("li");
+  const hasNote = refs.noteInput.value.trim().length > 0 || Boolean(state.currentSession?.note);
+  const hasExport = Boolean(state.currentSession?.lastExportAt);
+  const flags = {
+    question: hasQuestion,
+    draw: hasDraw,
+    guide: hasGuide,
+    note: hasNote,
+    export: hasExport
+  };
+  const activeIndex = WORKFLOW_STEPS.findIndex((step) => !flags[step.id]);
+  const fallbackIndex = WORKFLOW_STEPS.length - 1;
+  const highlightIndex = activeIndex === -1 ? fallbackIndex : activeIndex;
+
+  WORKFLOW_STEPS.forEach((step, index) => {
+    const card = document.createElement("article");
+    card.className = "workflow-step";
+    if (flags[step.id]) {
+      card.classList.add("is-complete");
+    } else if (index === highlightIndex) {
+      card.classList.add("is-active");
+    }
+    card.innerHTML = `<span class="workflow-step-index">${flags[step.id] ? "✓" : index + 1}</span><span class="workflow-step-name">${step.name}</span>`;
+    refs.workflowSteps.appendChild(card);
+  });
+}
+
+function renderActionPlan() {
+  refs.actionChecklist.innerHTML = "";
+  if (!state.currentSession || state.currentCards.length === 0) {
+    refs.autoSummaryText.textContent = "抽卡后自动生成总结与行动建议。";
+    return;
+  }
+
+  const plan = normalizeActionPlan(
+    state.currentSession.actionPlan ||
+      buildActionPlan(state.currentCards, refs.questionInput.value.trim(), refs.noteInput.value.trim(), MODES[state.modeId])
+  );
+  state.currentSession.actionPlan = plan;
+  syncCurrentSessionToHistory();
+  refs.autoSummaryText.textContent = plan.summary;
+  plan.actions.forEach((action, index) => {
+    const row = document.createElement("li");
+    if (action.done) {
+      row.classList.add("done");
+    }
+    const checkbox = document.createElement("input");
+    checkbox.type = "checkbox";
+    checkbox.checked = Boolean(action.done);
+    checkbox.dataset.actionIndex = String(index);
+    const text = document.createElement("span");
+    text.textContent = action.text;
+    row.append(checkbox, text);
+    refs.actionChecklist.appendChild(row);
+  });
+}
+
+function handleActionChecklistChange(event) {
+  const target = event.target;
+  if (!(target instanceof HTMLInputElement) || target.type !== "checkbox" || !state.currentSession?.actionPlan) {
+    return;
+  }
+  const index = Number(target.dataset.actionIndex);
+  if (!Number.isInteger(index) || index < 0) {
+    return;
+  }
+  const actions = state.currentSession.actionPlan.actions || [];
+  if (!actions[index]) {
+    return;
+  }
+  actions[index].done = target.checked;
+  syncCurrentSessionToHistory();
+  renderActionPlan();
+}
+
+function regenerateActionPlan() {
+  if (state.currentCards.length === 0 || !state.currentSession) {
+    setSummary("请先抽卡，再生成行动建议。", true);
+    return;
+  }
+  state.currentSession.actionPlan = normalizeActionPlan(
+    buildActionPlan(state.currentCards, refs.questionInput.value.trim(), refs.noteInput.value.trim(), MODES[state.modeId])
+  );
+  syncCurrentSessionToHistory();
+  renderActionPlan();
+  setSummary("已重新生成复盘总结与行动建议。", false);
+}
+
+function normalizeActionPlan(plan) {
+  const fallback = {
+    summary: "请先描述你看到的画面，再把联想到的现实议题写下来。",
+    actions: [
+      { text: "写下今天最想解决的 1 个问题，限定在一句话内。", done: false },
+      { text: "选 1 位可对话对象，约一个 15 分钟沟通时段。", done: false },
+      { text: "72 小时后复盘：记录这次行动带来的变化。", done: false }
+    ]
+  };
+  if (!plan || typeof plan !== "object") {
+    return fallback;
+  }
+  const summary = typeof plan.summary === "string" && plan.summary.trim() ? plan.summary.trim() : fallback.summary;
+  const sourceActions = Array.isArray(plan.actions) ? plan.actions : [];
+  const actions = sourceActions
+    .map((item) => {
+      if (!item || typeof item !== "object") {
+        return null;
+      }
+      const text = typeof item.text === "string" ? item.text.trim() : "";
+      if (!text) {
+        return null;
+      }
+      return { text, done: Boolean(item.done) };
+    })
+    .filter(Boolean)
+    .slice(0, 3);
+
+  if (actions.length < 3) {
+    fallback.actions.forEach((item) => {
+      if (actions.length < 3) {
+        actions.push({ ...item });
+      }
+    });
+  }
+
+  return { summary, actions };
+}
+
+function buildActionPlan(cards, question, note, mode) {
+  const modeName = mode?.name || MODES[state.modeId]?.name || "当前玩法";
+  const leadCards = cards.slice(0, 3).map((card) => getCardShortName(card));
+  const primaryKeywords = uniqueValues(
+    cards
+      .flatMap((card) => {
+        const kind = getCardKind(card);
+        if (kind === "pair") {
+          return [...(card.imageCard?.keywords || []), ...(card.wordCard?.keywords || [])];
+        }
+        return card.keywords || [];
+      })
+      .slice(0, 12)
+  ).slice(0, 3);
+  const questionText = question || "当前议题";
+  const noteHint = note ? `你在记录里提到“${note.slice(0, 20)}${note.length > 20 ? "..." : ""}”，` : "";
+  const summary = `在「${modeName}」中，牌面 ${leadCards.join(" / ")} 指向了「${primaryKeywords.join("、") || "看见-联想-行动"}」这条主线。${noteHint}建议先把「${questionText}」收敛成一个可执行小目标。`;
+
+  return {
+    summary,
+    actions: [
+      {
+        text: `今天 10 分钟：围绕「${questionText}」写下 3 个你能控制的动作，只保留最小的一步。`,
+        done: false
+      },
+      {
+        text: `24 小时内：把牌面里最触动你的词（如「${primaryKeywords[0] || "核心线索"}」）转成一条现实沟通或尝试。`,
+        done: false
+      },
+      {
+        text: "72 小时复盘：检查这一步是否降低了内耗，并决定是继续、调整还是停止。",
+        done: false
+      }
+    ]
+  };
+}
+
+function renderDeckValidation() {
+  refs.deckValidationSummary.textContent = state.deckValidation.summary || "等待导入卡包后校验。";
+  refs.deckValidationList.innerHTML = "";
+  const items = Array.isArray(state.deckValidation.items) ? state.deckValidation.items : [];
+  if (items.length === 0) {
+    const row = document.createElement("li");
+    row.textContent = "暂无异常。";
+    refs.deckValidationList.appendChild(row);
+    return;
+  }
+  items.slice(0, 12).forEach((item) => {
+    const row = document.createElement("li");
+    row.textContent = item.text;
+    if (item.level === "warn") {
+      row.classList.add("warn");
+    } else if (item.level === "error") {
+      row.classList.add("error");
+    }
+    refs.deckValidationList.appendChild(row);
+  });
+}
+
 function renderOverlayTuneControls() {
   refs.overlayLeftInput.value = String(state.overlayTune.left);
   refs.overlayRightInput.value = String(state.overlayTune.right);
@@ -557,8 +790,12 @@ function applyOverlayTuneToElement(element) {
 function refreshOverlayTuneStyles() {
   document.querySelectorAll(".pair-composite").forEach((element) => {
     applyOverlayTuneToElement(element);
+    const image = element.querySelector(".pair-image-overlay img");
+    updateCompositeSafeImageFit(element, image);
   });
   applyOverlayTuneToElement(refs.previewPairComposite);
+  updateCompositeSafeImageFit(refs.previewPairComposite, refs.previewPairImage);
+  scheduleRefreshViewportFits();
 }
 
 function renderModeDetail() {
@@ -647,7 +884,9 @@ function runDraw() {
       layoutDirection: state.layoutDirection,
       question: refs.questionInput.value.trim(),
       cards,
-      note: ""
+      note: "",
+      lastExportAt: "",
+      actionPlan: normalizeActionPlan(buildActionPlan(cards, refs.questionInput.value.trim(), refs.noteInput.value.trim(), mode))
     };
 
     state.currentSession = session;
@@ -657,6 +896,8 @@ function runDraw() {
       `已完成「${mode.name} / ${DECK_TYPES[state.deckTypeId].name}」抽卡：${cards.map((card) => getCardShortName(card)).join(" / ")}`,
       false
     );
+    renderActionPlan();
+    renderWorkflowSteps();
     preloadCards(cards);
     preloadNextRoundCandidates(mode.count);
     refs.drawBtn.disabled = false;
@@ -737,6 +978,7 @@ function renderSpread(cards, slotLabels) {
       tile.classList.add("revealed");
     }, 80 + index * 120);
   });
+  scheduleRefreshViewportFits();
 }
 
 function fillCardFront(front, card, slotLabel) {
@@ -762,9 +1004,9 @@ function fillCardFront(front, card, slotLabel) {
     wordBase.className = "pair-word-base";
     if (card.wordCard.image) {
       const wordImage = document.createElement("img");
-      wordImage.src = card.wordCard.image;
       wordImage.alt = card.wordCard.name;
       wordImage.loading = "lazy";
+      applySmartImageSource(wordImage, card.wordCard.image);
       wordBase.appendChild(wordImage);
     } else {
       const fallback = document.createElement("div");
@@ -776,12 +1018,13 @@ function fillCardFront(front, card, slotLabel) {
     const imageOverlay = document.createElement("div");
     imageOverlay.className = "pair-image-overlay";
     const image = document.createElement("img");
-    image.src = card.imageCard.image;
     image.alt = card.imageCard.name;
     image.loading = "lazy";
+    applySmartImageSource(image, card.imageCard.image);
     imageOverlay.appendChild(image);
 
     pairComposite.append(wordBase, imageOverlay);
+    pairComposite.dataset.imageSrc = card.imageCard.image || "";
     pairViewport.appendChild(pairComposite);
 
     const rotateControls = document.createElement("div");
@@ -814,6 +1057,8 @@ function fillCardFront(front, card, slotLabel) {
     pairInteractive.dataset.previewTitle = `${card.imageCard.name} + ${card.wordCard.name}`;
     pairInteractive.append(pairViewport, rotateControls);
     setupPairViewportGestures(pairViewport);
+    updateCompositeSafeImageFit(pairComposite, image);
+    scheduleRefreshViewportFits();
 
     const line = document.createElement("p");
     line.className = "card-line";
@@ -831,9 +1076,9 @@ function fillCardFront(front, card, slotLabel) {
     const imageBlock = document.createElement("div");
     imageBlock.className = "image-block";
     const image = document.createElement("img");
-    image.src = card.image;
     image.alt = card.name;
     image.loading = "lazy";
+    applySmartImageSource(image, card.image);
     makePreviewableImage(image, `${card.name}（图卡）`);
     imageBlock.appendChild(image);
 
@@ -858,9 +1103,9 @@ function fillCardFront(front, card, slotLabel) {
     const wordImageBlock = document.createElement("div");
     wordImageBlock.className = "image-block word-image-block";
     const image = document.createElement("img");
-    image.src = card.image;
     image.alt = card.name;
     image.loading = "lazy";
+    applySmartImageSource(image, card.image);
     makePreviewableImage(image, `${card.name}（字卡）`);
     wordImageBlock.appendChild(image);
 
@@ -945,6 +1190,28 @@ function prependHistory(session) {
   renderHistory();
 }
 
+function syncCurrentSessionToHistory() {
+  if (!state.currentSession) {
+    return;
+  }
+  state.history = state.history.map((entry) => {
+    if (entry.id !== state.currentSession.id) {
+      return entry;
+    }
+    return {
+      ...entry,
+      question: refs.questionInput.value.trim(),
+      note: refs.noteInput.value.trim(),
+      modeId: state.modeId,
+      deckTypeId: state.deckTypeId,
+      layoutDirection: state.layoutDirection,
+      actionPlan: normalizeActionPlan(state.currentSession.actionPlan),
+      lastExportAt: state.currentSession.lastExportAt || ""
+    };
+  });
+  persistHistory();
+}
+
 function renderHistory() {
   refs.historyList.innerHTML = "";
   if (state.history.length === 0) {
@@ -961,6 +1228,8 @@ function renderHistory() {
     const mode = MODES[session.modeId];
     const deckType = DECK_TYPES[session.deckTypeId] || DECK_TYPES[inferDeckTypeFromCards(session.cards)] || DECK_TYPES.word;
     const layoutDirection = LAYOUT_DIRECTIONS[session.layoutDirection] || LAYOUT_DIRECTIONS.up;
+    const actionPlan = normalizeActionPlan(session.actionPlan);
+    const doneCount = actionPlan.actions.filter((item) => item.done).length;
 
     const time = new Date(session.time);
     const localTime = `${time.getFullYear()}-${pad2(time.getMonth() + 1)}-${pad2(time.getDate())} ${pad2(
@@ -972,6 +1241,7 @@ function renderHistory() {
       <p>问题：${escapeHTML(session.question || "（未填写）")}</p>
       <p>牌面：${escapeHTML((session.cards || []).map((card) => getCardShortName(card)).join(" / "))}</p>
       <p>笔记：${escapeHTML(session.note || "（未记录）")}</p>
+      <p>行动进度：${doneCount}/3</p>
       <div class="actions compact">
         <button class="btn btn-ghost" data-action="replay" data-id="${escapeHTML(session.id)}">回看此局</button>
         <button class="btn btn-danger" data-action="remove" data-id="${escapeHTML(session.id)}">删除</button>
@@ -991,9 +1261,12 @@ function handleHistoryAction(event) {
     state.history = state.history.filter((entry) => entry.id !== id);
     if (state.currentSession && state.currentSession.id === id) {
       state.currentSession = null;
+      state.currentCards = [];
+      renderActionPlan();
     }
     persistHistory();
     renderHistory();
+    renderWorkflowSteps();
     return;
   }
   if (action === "replay") {
@@ -1004,6 +1277,13 @@ function handleHistoryAction(event) {
     state.modeId = session.modeId in MODES ? session.modeId : "focus";
     state.deckTypeId = session.deckTypeId in DECK_TYPES ? session.deckTypeId : inferDeckTypeFromCards(session.cards);
     state.layoutDirection = session.layoutDirection in LAYOUT_DIRECTIONS ? session.layoutDirection : "up";
+    if (!session.actionPlan) {
+      session.actionPlan = normalizeActionPlan(
+        buildActionPlan(session.cards || [], session.question || "", session.note || "", MODES[session.modeId] || MODES.focus)
+      );
+    } else {
+      session.actionPlan = normalizeActionPlan(session.actionPlan);
+    }
     state.currentSession = session;
     state.currentCards = session.cards || [];
     state.layerId = "description";
@@ -1016,6 +1296,8 @@ function handleHistoryAction(event) {
     renderPromptTabs();
     renderSpread(state.currentCards, MODES[state.modeId].labels);
     renderPrompts();
+    renderActionPlan();
+    renderWorkflowSteps();
     setSummary(
       `已回看历史：${MODES[state.modeId].name} / ${DECK_TYPES[state.deckTypeId].name} / ${LAYOUT_DIRECTIONS[state.layoutDirection].name}`,
       false
@@ -1030,14 +1312,9 @@ function saveCurrentNote() {
   }
   const noteText = refs.noteInput.value.trim();
   state.currentSession.note = noteText;
-  state.history = state.history.map((entry) => {
-    if (entry.id === state.currentSession.id) {
-      return { ...entry, note: noteText };
-    }
-    return entry;
-  });
-  persistHistory();
+  syncCurrentSessionToHistory();
   renderHistory();
+  renderWorkflowSteps();
   setSummary("本次记录已保存到浏览器本地。", false);
 }
 
@@ -1048,6 +1325,7 @@ async function copyCurrentReport() {
   }
   const mode = MODES[state.modeId];
   const promptItems = Array.from(refs.promptList.querySelectorAll("li")).map((item) => item.textContent || "");
+  const actionPlan = normalizeActionPlan(state.currentSession?.actionPlan);
   const report = [
     "【OH 卡引导记录】",
     `问题：${refs.questionInput.value.trim() || "（未填写）"}`,
@@ -1059,6 +1337,10 @@ async function copyCurrentReport() {
     `当前提问层：${PROMPT_LAYERS.find((layer) => layer.id === state.layerId)?.name || ""}`,
     "引导问题：",
     ...promptItems.map((line) => `- ${line}`),
+    "复盘总结：",
+    `- ${actionPlan.summary}`,
+    "行动建议：",
+    ...actionPlan.actions.map((item, index) => `- [${item.done ? "x" : " "}] ${index + 1}. ${item.text}`),
     `笔记：${refs.noteInput.value.trim() || "（未填写）"}`
   ].join("\n");
 
@@ -1087,6 +1369,8 @@ function resetBoard() {
   const promptItem = document.createElement("li");
   promptItem.textContent = "你已重置牌面。可先输入问题，再开始抽卡。";
   refs.promptList.appendChild(promptItem);
+  renderActionPlan();
+  renderWorkflowSteps();
   setSummary("牌组已重置，准备开始新一局。", false);
 }
 
@@ -1094,6 +1378,7 @@ function clearHistory() {
   state.history = [];
   persistHistory();
   renderHistory();
+  renderWorkflowSteps();
   setSummary("历史记录已清空。", false);
 }
 
@@ -1109,13 +1394,16 @@ function setMode(modeId) {
     renderPrompts();
   } else if (state.currentCards.length > 0) {
     state.currentCards = [];
+    state.currentSession = null;
     refs.spreadBoard.className = "spread-board empty";
     refs.spreadBoard.innerHTML = '<p class="placeholder">玩法已切换，请重新抽卡以匹配新的牌阵结构。</p>';
     refs.promptList.innerHTML = "";
     const promptItem = document.createElement("li");
     promptItem.textContent = "当前玩法结构已更新，请抽卡后再进行引导提问。";
     refs.promptList.appendChild(promptItem);
+    renderActionPlan();
   }
+  renderWorkflowSteps();
   setSummary(`已切换玩法：${MODES[modeId].name}`, false);
 }
 
@@ -1129,14 +1417,17 @@ function setDeckType(deckTypeId) {
 
   if (state.currentCards.length > 0) {
     state.currentCards = [];
+    state.currentSession = null;
     refs.spreadBoard.className = "spread-board empty";
     refs.spreadBoard.innerHTML = '<p class="placeholder">卡组模式已切换，请重新抽卡。</p>';
     refs.promptList.innerHTML = "";
     const promptItem = document.createElement("li");
     promptItem.textContent = "卡组模式变化后需要重新抽卡，才能得到正确引导。";
     refs.promptList.appendChild(promptItem);
+    renderActionPlan();
   }
 
+  renderWorkflowSteps();
   setSummary(`已切换卡组：${DECK_TYPES[deckTypeId].name}`, false);
 }
 
@@ -1165,6 +1456,7 @@ function setLayoutDirection(directionId) {
     renderPrompts();
   }
 
+  renderWorkflowSteps();
   setSummary(`已切换方向：${LAYOUT_DIRECTIONS[directionId].name}`, false);
 }
 
@@ -1179,8 +1471,15 @@ async function importDeckFromFile(file, type) {
       throw new Error("JSON 顶层必须是数组。");
     }
 
+    const parsed =
+      type === "word"
+        ? raw.map((entry) => normalizeWordCard(entry)).filter(Boolean)
+        : raw.map((entry) => normalizeImageCard(entry)).filter(Boolean);
+    const validation = await buildDeckValidationReport(raw, parsed, type);
+    state.deckValidation = validation;
+    renderDeckValidation();
+
     if (type === "word") {
-      const parsed = raw.map((entry) => normalizeWordCard(entry)).filter(Boolean);
       if (parsed.length < 5) {
         throw new Error("字卡数量太少，至少需要 5 张。");
       }
@@ -1199,6 +1498,7 @@ async function importDeckFromFile(file, type) {
 
     persistCustomDecks();
     renderDeckStatus();
+    renderWorkflowSteps();
     warmupPreload();
   } catch (error) {
     console.error("import deck failed", error);
@@ -1206,13 +1506,103 @@ async function importDeckFromFile(file, type) {
   }
 }
 
+async function buildDeckValidationReport(rawEntries, parsedCards, type) {
+  const items = [];
+  const seenName = new Map();
+  let missingNameCount = 0;
+  let missingImageCount = 0;
+
+  rawEntries.forEach((entry, index) => {
+    const name = typeof entry?.name === "string" ? entry.name.trim() : "";
+    if (!name) {
+      missingNameCount += 1;
+    } else {
+      const existing = seenName.get(name) || [];
+      existing.push(index + 1);
+      seenName.set(name, existing);
+    }
+    const image = typeof entry?.image === "string" ? entry.image.trim() : "";
+    if (!image) {
+      missingImageCount += 1;
+    }
+  });
+
+  if (missingNameCount > 0) {
+    items.push({ level: "error", text: `发现 ${missingNameCount} 条缺少 name，已被忽略。` });
+  }
+  if (missingImageCount > 0) {
+    items.push({
+      level: type === "image" ? "error" : "warn",
+      text: `发现 ${missingImageCount} 条缺少 image，${type === "image" ? "图卡会影响展示。" : "字卡会回退为文本样式。"}`
+    });
+  }
+
+  const duplicates = Array.from(seenName.entries()).filter(([, indexes]) => indexes.length > 1);
+  duplicates.slice(0, 6).forEach(([name, indexes]) => {
+    items.push({ level: "warn", text: `重名卡片「${name}」出现在第 ${indexes.join(" / ")} 条。` });
+  });
+  if (duplicates.length > 6) {
+    items.push({ level: "warn", text: `还有 ${duplicates.length - 6} 组重名未展开。` });
+  }
+
+  const sizeWarnings = await inspectDeckImageDimensions(parsedCards, type);
+  items.push(...sizeWarnings);
+
+  const errorCount = items.filter((item) => item.level === "error").length;
+  const warnCount = items.filter((item) => item.level === "warn").length;
+  const summary = `已校验 ${rawEntries.length} 条，成功解析 ${parsedCards.length} 条；异常 ${errorCount}，提醒 ${warnCount}。`;
+  return { summary, items };
+}
+
+async function inspectDeckImageDimensions(cards, type) {
+  const issues = [];
+  const candidates = cards.filter((card) => card?.image).slice(0, 24);
+  const minRatio = type === "word" ? 0.56 : 0.5;
+  const maxRatio = type === "word" ? 1.02 : 1.1;
+
+  for (const card of candidates) {
+    const meta = await loadImageMeta(card.image);
+    if (!meta) {
+      continue;
+    }
+    if (meta.width < 420 || meta.height < 540) {
+      issues.push({ level: "warn", text: `「${card.name}」分辨率偏低（${meta.width}x${meta.height}）。` });
+    }
+    const ratio = meta.width / meta.height;
+    if (ratio < minRatio || ratio > maxRatio) {
+      issues.push({ level: "warn", text: `「${card.name}」比例异常（${ratio.toFixed(2)}），可能导致叠卡留白或裁切。` });
+    }
+    if (issues.length >= 8) {
+      break;
+    }
+  }
+  return issues;
+}
+
+async function loadImageMeta(url) {
+  if (!url) {
+    return null;
+  }
+  return new Promise((resolve) => {
+    const image = new Image();
+    image.onload = () => resolve({ width: image.naturalWidth, height: image.naturalHeight });
+    image.onerror = () => resolve(null);
+    image.src = url;
+  });
+}
+
 function resetDecksToBuiltIn() {
   state.wordDeck = cloneCards(DEFAULT_WORD_DECK);
   state.imageDeck = cloneCards(DEFAULT_IMAGE_DECK);
   state.deckSource.word = "built-in";
   state.deckSource.image = "built-in";
+  state.deckValidation = {
+    summary: "已切回内置卡组。你也可以重新导入自定义卡包并查看校验结果。",
+    items: []
+  };
   persistCustomDecks();
   renderDeckStatus();
+  renderDeckValidation();
   setSummary("已恢复内置图卡和字卡，正在尝试自动加载实卡素材。", false);
   autoLoadBundledDecks();
 }
@@ -1291,7 +1681,12 @@ async function autoLoadBundledDecks() {
       return;
     }
 
+    state.deckValidation = {
+      summary: "已加载实卡包。建议抽几局确认你的卡图比例是否符合预期。",
+      items: []
+    };
     renderDeckStatus();
+    renderDeckValidation();
     warmupPreload();
     setSummary(
       `已自动加载实卡素材：图卡 ${state.imageDeck.length} 张 / 字卡 ${state.wordDeck.length} 张。${state.bundledWebpAvailable ? " WebP 已启用。" : ""}`,
@@ -1537,6 +1932,7 @@ function applyPairRotation(viewport, quarter) {
   viewport.dataset.rotationQuarter = String(normalized);
   viewport.classList.remove(...ROTATION_CLASSES);
   viewport.classList.add(ROTATION_CLASSES[normalized]);
+  refreshPairViewportFit(viewport);
 }
 
 function rotatePairViewport(viewport, deltaQuarter) {
@@ -1546,6 +1942,22 @@ function rotatePairViewport(viewport, deltaQuarter) {
   if (!refs.previewPairWrap.hidden && refs.previewSyncRotation.checked && state.previewSourceViewport === viewport) {
     applyPreviewPairRotation(Number(refs.previewPairComposite.dataset.rotationQuarter || 0) + delta);
   }
+}
+
+function togglePreviewFitMode(forceMode) {
+  if (refs.previewPairWrap.hidden) {
+    return;
+  }
+  const mode = forceMode === "fit" || forceMode === "full" ? forceMode : state.previewFitMode === "fit" ? "full" : "fit";
+  state.previewFitMode = mode;
+  updatePreviewFitToggle();
+  refreshPreviewViewportFit();
+}
+
+function updatePreviewFitToggle() {
+  const isFull = state.previewFitMode === "full";
+  refs.previewFitToggleBtn.classList.toggle("is-active", isFull);
+  refs.previewFitToggleBtn.textContent = isFull ? "适配" : "全图";
 }
 
 function makePreviewableImage(imageElement, titleText) {
@@ -1587,6 +1999,9 @@ function setPreviewMode(mode) {
   refs.previewImage.hidden = isPair;
   refs.previewPairWrap.hidden = !isPair;
   refs.previewPairTools.hidden = !isPair;
+  if (!isPair) {
+    refs.previewFitToggleBtn.classList.remove("is-active");
+  }
 }
 
 function openImagePreview(src, title) {
@@ -1594,7 +2009,9 @@ function openImagePreview(src, title) {
     return;
   }
   setPreviewMode("single");
-  refs.previewImage.src = src;
+  refs.previewFitToggleBtn.classList.remove("is-active");
+  refs.previewFitToggleBtn.textContent = "全图";
+  applySmartImageSource(refs.previewImage, src);
   refs.previewImage.alt = title || "卡牌放大预览";
   refs.previewTitle.textContent = title || "";
   refs.imagePreviewModal.hidden = false;
@@ -1608,14 +2025,20 @@ function openPairPreview(imageSrc, wordSrc, title, quarter, sourceViewport = nul
   }
   setPreviewMode("pair");
   state.previewSourceViewport = sourceViewport;
-  refs.previewPairImage.src = imageSrc;
-  refs.previewPairWord.src = wordSrc;
+  state.previewFitMode = "fit";
+  applySmartImageSource(refs.previewPairImage, imageSrc);
+  applySmartImageSource(refs.previewPairWord, wordSrc);
+  updateCompositeSafeImageFit(refs.previewPairComposite, refs.previewPairImage);
   applyOverlayTuneToElement(refs.previewPairComposite);
   applyPreviewPairRotation(quarter);
+  updatePreviewFitToggle();
   setCompositeGestureScale(refs.previewPairComposite, 1);
   refs.previewTitle.textContent = title || "图卡 + 字卡";
   refs.imagePreviewModal.hidden = false;
   document.body.style.overflow = "hidden";
+  requestAnimationFrame(() => {
+    refreshPreviewViewportFit();
+  });
 }
 
 function applyPreviewPairRotation(quarter) {
@@ -1623,6 +2046,7 @@ function applyPreviewPairRotation(quarter) {
   refs.previewPairComposite.dataset.rotationQuarter = String(normalized);
   refs.previewPairComposite.classList.remove(...ROTATION_CLASSES);
   refs.previewPairComposite.classList.add(ROTATION_CLASSES[normalized]);
+  refreshPreviewViewportFit();
 }
 
 function rotatePreviewPair(deltaQuarter) {
@@ -1641,9 +2065,14 @@ function closeImagePreview() {
   refs.imagePreviewModal.hidden = true;
   setPreviewMode("single");
   state.previewSourceViewport = null;
+  state.previewFitMode = "fit";
+  updatePreviewFitToggle();
   refs.previewImage.src = "";
+  refs.previewImage.classList.remove("smart-thumb-loading");
   refs.previewPairImage.src = "";
+  refs.previewPairImage.classList.remove("smart-thumb-loading");
   refs.previewPairWord.src = "";
+  refs.previewPairWord.classList.remove("smart-thumb-loading");
   applyPreviewPairRotation(0);
   setCompositeGestureScale(refs.previewPairComposite, 1);
   refs.previewTitle.textContent = "";
@@ -1793,6 +2222,132 @@ function touchDistance(touchA, touchB) {
   return Math.hypot(dx, dy);
 }
 
+function refreshPairViewportFit(viewport) {
+  if (!viewport) {
+    return;
+  }
+  const composite = viewport.querySelector(".pair-composite");
+  if (!composite) {
+    return;
+  }
+  const quarter = normalizeQuarter(Number(viewport.dataset.rotationQuarter || 0));
+  const scale = computeViewportFitScale(viewport, composite, quarter, "fit");
+  composite.style.setProperty("--fit-scale", String(scale));
+}
+
+function refreshPreviewViewportFit() {
+  const quarter = normalizeQuarter(Number(refs.previewPairComposite.dataset.rotationQuarter || 0));
+  const scale = computeViewportFitScale(refs.previewPairViewport, refs.previewPairComposite, quarter, state.previewFitMode);
+  refs.previewPairComposite.style.setProperty("--fit-scale", String(scale));
+  refs.previewPairComposite.style.setProperty("--preview-zoom", state.previewFitMode === "full" ? "1.12" : "1");
+}
+
+function scheduleRefreshViewportFits() {
+  if (state.viewportFitTick) {
+    cancelAnimationFrame(state.viewportFitTick);
+  }
+  state.viewportFitTick = requestAnimationFrame(() => {
+    state.viewportFitTick = 0;
+    document.querySelectorAll(".pair-viewport").forEach((viewport) => {
+      refreshPairViewportFit(viewport);
+    });
+    if (!refs.previewPairWrap.hidden) {
+      refreshPreviewViewportFit();
+    }
+  });
+}
+
+function computeViewportFitScale(viewport, composite, quarter, mode) {
+  if (!viewport || !composite) {
+    return 1;
+  }
+  const viewportRect = viewport.getBoundingClientRect();
+  const style = getComputedStyle(viewport);
+  const paddingX = parseFloat(style.paddingLeft || "0") + parseFloat(style.paddingRight || "0");
+  const paddingY = parseFloat(style.paddingTop || "0") + parseFloat(style.paddingBottom || "0");
+  const availableW = Math.max(120, viewportRect.width - paddingX);
+  const availableH = Math.max(120, viewportRect.height - paddingY);
+
+  const baseWidth = composite.offsetWidth || Math.min(availableW, 560);
+  const baseHeight = composite.offsetHeight || baseWidth / COMPOSITE_BASE_RATIO;
+  const rotatedWidth = quarter % 2 === 0 ? baseWidth : baseHeight;
+  const rotatedHeight = quarter % 2 === 0 ? baseHeight : baseWidth;
+  const fitScale = Math.min(availableW / rotatedWidth, availableH / rotatedHeight);
+  const normalized = Math.max(0.42, Math.min(1.35, fitScale * 0.985));
+  if (mode === "full") {
+    return Math.max(0.42, Math.min(1.4, normalized * 1.08));
+  }
+  return normalized;
+}
+
+function computeOverlayAspectRatio() {
+  const widthFactor = 1 - (state.overlayTune.left + state.overlayTune.right) / 100;
+  const heightFactor = 1 - (state.overlayTune.top + state.overlayTune.bottom) / 100;
+  const safeWidth = Math.max(0.2, widthFactor);
+  const safeHeight = Math.max(0.2, heightFactor);
+  return COMPOSITE_BASE_RATIO * (safeWidth / safeHeight);
+}
+
+function updateCompositeSafeImageFit(composite, imageElement) {
+  if (!composite || !imageElement) {
+    return;
+  }
+  const applyFit = () => {
+    const naturalW = imageElement.naturalWidth;
+    const naturalH = imageElement.naturalHeight;
+    if (!naturalW || !naturalH) {
+      return;
+    }
+    const imageRatio = naturalW / naturalH;
+    const overlayRatio = computeOverlayAspectRatio();
+    const drift = imageRatio / overlayRatio;
+    const fitMode = drift > 1.36 || drift < 0.68 ? "contain" : "cover";
+    composite.style.setProperty("--pair-image-fit", fitMode);
+    composite.style.setProperty("--pair-image-bg", fitMode === "contain" ? "rgba(245,245,245,0.95)" : "#ffffff");
+  };
+  if (imageElement.complete && imageElement.naturalWidth > 0) {
+    applyFit();
+  } else {
+    imageElement.addEventListener("load", applyFit, { once: true });
+  }
+}
+
+function setupPreviewPressZoom() {
+  const target = refs.previewPairViewport;
+  if (!target || target.dataset.pressZoomBound === "1") {
+    return;
+  }
+  target.dataset.pressZoomBound = "1";
+  let timer = null;
+  let pressing = false;
+
+  const clear = () => {
+    if (timer) {
+      clearTimeout(timer);
+      timer = null;
+    }
+    pressing = false;
+    refs.previewPairComposite.classList.remove("is-press-zoom");
+  };
+
+  target.addEventListener("pointerdown", (event) => {
+    if (event.button !== 0 || refs.previewPairWrap.hidden) {
+      return;
+    }
+    clear();
+    pressing = true;
+    timer = setTimeout(() => {
+      if (pressing && !refs.previewPairWrap.hidden) {
+        refs.previewPairComposite.classList.add("is-press-zoom");
+      }
+    }, 280);
+  });
+
+  target.addEventListener("pointerup", clear);
+  target.addEventListener("pointerleave", clear);
+  target.addEventListener("pointercancel", clear);
+}
+
 function toggleImmersiveMode(force) {
   const next = typeof force === "boolean" ? force : !state.immersive;
   state.immersive = next;
@@ -1835,14 +2390,74 @@ function normalizeOverlayValue(value, fallback) {
 }
 
 function preloadImageUrl(url) {
-  if (!url || state.preloadedImageUrls.has(url)) {
+  if (!url) {
+    return Promise.resolve(null);
+  }
+  if (state.preloadedImageTasks.has(url)) {
+    return state.preloadedImageTasks.get(url);
+  }
+  const task = new Promise((resolve) => {
+    const image = new Image();
+    image.decoding = "async";
+    image.loading = "eager";
+    image.onload = () => {
+      state.preloadedImageUrls.add(url);
+      if (!state.thumbnailCache.has(url)) {
+        const thumb = createThumbnailData(image);
+        if (thumb) {
+          state.thumbnailCache.set(url, thumb);
+        }
+      }
+      resolve(url);
+    };
+    image.onerror = () => resolve(null);
+    image.src = url;
+  });
+  state.preloadedImageTasks.set(url, task);
+  return task;
+}
+
+function createThumbnailData(image) {
+  try {
+    const maxHeight = 120;
+    const ratio = maxHeight / Math.max(1, image.naturalHeight);
+    const width = Math.max(28, Math.round(image.naturalWidth * ratio));
+    const height = Math.max(36, Math.round(image.naturalHeight * ratio));
+    const canvas = document.createElement("canvas");
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) {
+      return "";
+    }
+    ctx.drawImage(image, 0, 0, width, height);
+    return canvas.toDataURL("image/jpeg", 0.5);
+  } catch (error) {
+    return "";
+  }
+}
+
+function applySmartImageSource(element, url) {
+  if (!element || !url) {
     return;
   }
-  state.preloadedImageUrls.add(url);
-  const image = new Image();
-  image.decoding = "async";
-  image.loading = "eager";
-  image.src = url;
+  element.dataset.fullSrc = url;
+  const thumb = state.thumbnailCache.get(url);
+  if (thumb) {
+    element.src = thumb;
+    element.classList.add("smart-thumb-loading");
+  } else {
+    element.src = url;
+  }
+  preloadImageUrl(url).then((fullUrl) => {
+    if (!fullUrl || element.dataset.fullSrc !== fullUrl) {
+      return;
+    }
+    if (element.src !== fullUrl) {
+      element.src = fullUrl;
+    }
+    element.classList.remove("smart-thumb-loading");
+  });
 }
 
 function preloadCards(cards) {
@@ -1867,8 +2482,8 @@ function preloadNextRoundCandidates(count) {
 }
 
 function warmupPreload() {
-  const imageWarmup = state.imageDeck.slice(0, 12).map((card) => ({ ...card, kind: "image" }));
-  const wordWarmup = state.wordDeck.slice(0, 12).map((card) => ({ ...card, kind: "word" }));
+  const imageWarmup = state.imageDeck.slice(0, 18).map((card) => ({ ...card, kind: "image" }));
+  const wordWarmup = state.wordDeck.slice(0, 18).map((card) => ({ ...card, kind: "word" }));
   preloadCards([...imageWarmup, ...wordWarmup]);
 }
 
@@ -1927,6 +2542,7 @@ async function exportSessionAsset(type) {
           return;
         }
         downloadBlob(blob, buildExportFilename("png"));
+        markExportCompleted();
         setSummary("已导出复盘 PNG。", false);
       }, "image/png");
       return;
@@ -1943,11 +2559,22 @@ async function exportSessionAsset(type) {
     });
     pdf.addImage(canvas.toDataURL("image/png"), "PNG", 0, 0, canvas.width, canvas.height);
     pdf.save(buildExportFilename("pdf"));
+    markExportCompleted();
     setSummary("已导出复盘 PDF。", false);
   } catch (error) {
     console.error("exportSessionAsset failed", error);
     setSummary(`导出失败：${error.message || "未知错误"}`, true);
   }
+}
+
+function markExportCompleted() {
+  if (!state.currentSession) {
+    return;
+  }
+  const exportTime = new Date().toISOString();
+  state.currentSession.lastExportAt = exportTime;
+  syncCurrentSessionToHistory();
+  renderWorkflowSteps();
 }
 
 function buildExportFilename(ext) {
