@@ -95,6 +95,25 @@
               <p id="deckValidationSummary" class="deck-note">导入后会自动检查重名、缺图、尺寸异常。</p>
               <ul id="deckValidationList" class="deck-validation-list"></ul>
             </div>
+            <div class="deck-manager2">
+              <h3>7. 卡包工坊</h3>
+              <p class="deck-note">支持拖拽图片自动生成 JSON、批量重命名和一键比例修复。</p>
+              <div class="deck-build-controls">
+                <label class="label-inline" for="deckBuildTarget">目标卡组</label>
+                <select id="deckBuildTarget">
+                  <option value="image">图卡</option>
+                  <option value="word">字卡</option>
+                </select>
+                <input id="deckBatchPrefix" type="text" placeholder="批量前缀（如 图卡）" />
+              </div>
+              <div id="deckDropzone" class="deck-dropzone">拖拽图片到这里自动生成卡包</div>
+              <div class="actions compact">
+                <button id="selectDeckImagesBtn" class="btn btn-ghost">选择图片并生成</button>
+                <button id="batchRenameBtn" class="btn btn-ghost">批量重命名</button>
+                <button id="fixRatioBtn" class="btn btn-ghost">一键修复比例</button>
+              </div>
+              <input id="deckImagesInput" type="file" accept="image/*" multiple hidden />
+            </div>
           </div>
 
           <div class="actions">
@@ -172,6 +191,8 @@
             <button id="clearNoteBtn" class="btn btn-ghost">清空输入</button>
             <button id="exportPngBtn" class="btn btn-ghost">导出复盘 PNG</button>
             <button id="exportPdfBtn" class="btn btn-ghost">导出复盘 PDF</button>
+            <button id="exportA4Btn" class="btn btn-ghost">导出可打印 A4</button>
+            <button id="exportPosterBtn" class="btn btn-ghost">导出卡面海报</button>
           </div>
           <div class="replay-assistant">
             <div class="replay-assistant-head">
@@ -180,6 +201,7 @@
             </div>
             <p id="autoSummaryText" class="auto-summary-text">抽卡后自动生成总结与行动建议。</p>
             <ul id="actionChecklist" class="action-checklist"></ul>
+            <p id="actionStats" class="action-stats">完成率：0%（0/3）</p>
           </div>
         </section>
 
@@ -187,6 +209,16 @@
           <div class="history-head">
             <h2>历史回看</h2>
             <button id="clearHistoryBtn" class="btn btn-danger">清空历史</button>
+          </div>
+          <div class="history-tools">
+            <input id="historySearchInput" type="text" placeholder="搜索问题 / 牌面 / 笔记" />
+            <select id="historyTagFilter">
+              <option value="all">全部标签</option>
+              <option value="work">工作</option>
+              <option value="relationship">关系</option>
+              <option value="emotion">情绪</option>
+              <option value="decision">决策</option>
+            </select>
           </div>
           <div id="historyList" class="history-list"></div>
         </section>

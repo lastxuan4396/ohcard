@@ -309,10 +309,15 @@ const refs = {
   clearNoteBtn: document.getElementById("clearNoteBtn"),
   exportPngBtn: document.getElementById("exportPngBtn"),
   exportPdfBtn: document.getElementById("exportPdfBtn"),
+  exportA4Btn: document.getElementById("exportA4Btn"),
+  exportPosterBtn: document.getElementById("exportPosterBtn"),
   regenActionPlanBtn: document.getElementById("regenActionPlanBtn"),
   autoSummaryText: document.getElementById("autoSummaryText"),
   actionChecklist: document.getElementById("actionChecklist"),
+  actionStats: document.getElementById("actionStats"),
   historyList: document.getElementById("historyList"),
+  historySearchInput: document.getElementById("historySearchInput"),
+  historyTagFilter: document.getElementById("historyTagFilter"),
   clearHistoryBtn: document.getElementById("clearHistoryBtn"),
   playbookGrid: document.getElementById("playbookGrid"),
   timerMinutes: document.getElementById("timerMinutes"),
@@ -331,7 +336,14 @@ const refs = {
   previewRotateLeftBtn: document.getElementById("previewRotateLeftBtn"),
   previewRotateRightBtn: document.getElementById("previewRotateRightBtn"),
   previewSyncRotation: document.getElementById("previewSyncRotation"),
-  previewTitle: document.getElementById("previewTitle")
+  previewTitle: document.getElementById("previewTitle"),
+  deckBuildTarget: document.getElementById("deckBuildTarget"),
+  deckBatchPrefix: document.getElementById("deckBatchPrefix"),
+  deckDropzone: document.getElementById("deckDropzone"),
+  selectDeckImagesBtn: document.getElementById("selectDeckImagesBtn"),
+  deckImagesInput: document.getElementById("deckImagesInput"),
+  batchRenameBtn: document.getElementById("batchRenameBtn"),
+  fixRatioBtn: document.getElementById("fixRatioBtn")
 };
 
 const state = {
@@ -360,6 +372,9 @@ const state = {
   bundledWebpAvailable: false,
   viewportFitTick: 0,
   deckValidation: { summary: "等待导入卡包后校验。", items: [] },
+  historyQuery: "",
+  historyTag: "all",
+  dragPanStates: new WeakMap(),
   timer: {
     duration: 180,
     remaining: 180,
@@ -382,6 +397,8 @@ function init() {
   renderPromptTabs();
   renderPlaybook();
   renderHistory();
+  refs.historySearchInput.value = state.historyQuery;
+  refs.historyTagFilter.value = state.historyTag;
   renderWorkflowSteps();
   renderActionPlan();
   renderDeckValidation();
@@ -452,11 +469,21 @@ function bindEvents() {
   });
   refs.exportPngBtn.addEventListener("click", () => exportSessionAsset("png"));
   refs.exportPdfBtn.addEventListener("click", () => exportSessionAsset("pdf"));
+  refs.exportA4Btn.addEventListener("click", () => exportSessionAsset("a4pdf"));
+  refs.exportPosterBtn.addEventListener("click", () => exportSessionAsset("poster"));
   refs.regenActionPlanBtn.addEventListener("click", regenerateActionPlan);
   refs.actionChecklist.addEventListener("change", handleActionChecklistChange);
   refs.copyReportBtn.addEventListener("click", copyCurrentReport);
   refs.clearHistoryBtn.addEventListener("click", clearHistory);
   refs.historyList.addEventListener("click", handleHistoryAction);
+  refs.historySearchInput.addEventListener("input", () => {
+    state.historyQuery = refs.historySearchInput.value.trim();
+    renderHistory();
+  });
+  refs.historyTagFilter.addEventListener("change", () => {
+    state.historyTag = refs.historyTagFilter.value;
+    renderHistory();
+  });
   refs.deck.addEventListener("click", runDraw);
   refs.spreadBoard.addEventListener("click", handlePreviewImageClick);
   refs.timerToggle.addEventListener("click", toggleTimer);
@@ -483,6 +510,18 @@ function bindEvents() {
     event.target.value = "";
   });
   refs.resetDeckBtn.addEventListener("click", resetDecksToBuiltIn);
+  refs.selectDeckImagesBtn.addEventListener("click", () => {
+    refs.deckImagesInput.click();
+  });
+  refs.deckImagesInput.addEventListener("change", async (event) => {
+    await buildDeckFromImageFiles(Array.from(event.target.files || []), refs.deckBuildTarget.value);
+    event.target.value = "";
+  });
+  refs.batchRenameBtn.addEventListener("click", batchRenameCurrentDeck);
+  refs.fixRatioBtn.addEventListener("click", () => {
+    fixCurrentDeckImageRatio();
+  });
+  setupDeckDropzone();
 
   refs.previewCloseBtn.addEventListener("click", closeImagePreview);
   refs.previewFitToggleBtn.addEventListener("click", () => {
@@ -589,6 +628,7 @@ function renderActionPlan() {
   refs.actionChecklist.innerHTML = "";
   if (!state.currentSession || state.currentCards.length === 0) {
     refs.autoSummaryText.textContent = "抽卡后自动生成总结与行动建议。";
+    refs.actionStats.textContent = "完成率：0%（0/3）";
     return;
   }
 
@@ -604,20 +644,44 @@ function renderActionPlan() {
     if (action.done) {
       row.classList.add("done");
     }
+    const main = document.createElement("div");
+    main.className = "action-main";
     const checkbox = document.createElement("input");
     checkbox.type = "checkbox";
     checkbox.checked = Boolean(action.done);
     checkbox.dataset.actionIndex = String(index);
+    checkbox.dataset.field = "done";
     const text = document.createElement("span");
     text.textContent = action.text;
-    row.append(checkbox, text);
+    main.append(checkbox, text);
+
+    const meta = document.createElement("div");
+    meta.className = "action-meta";
+    const due = document.createElement("input");
+    due.type = "date";
+    due.value = action.dueDate || "";
+    due.dataset.actionIndex = String(index);
+    due.dataset.field = "dueDate";
+    const remind = document.createElement("select");
+    remind.dataset.actionIndex = String(index);
+    remind.dataset.field = "reminder";
+    remind.innerHTML = `
+      <option value="none">不提醒</option>
+      <option value="same-day">当天提醒</option>
+      <option value="1-day">提前 1 天</option>
+      <option value="3-day">提前 3 天</option>
+    `;
+    remind.value = action.reminder || "none";
+    meta.append(due, remind);
+    row.append(main, meta);
     refs.actionChecklist.appendChild(row);
   });
+  updateActionStats(plan);
 }
 
 function handleActionChecklistChange(event) {
   const target = event.target;
-  if (!(target instanceof HTMLInputElement) || target.type !== "checkbox" || !state.currentSession?.actionPlan) {
+  if (!(target instanceof HTMLInputElement || target instanceof HTMLSelectElement) || !state.currentSession?.actionPlan) {
     return;
   }
   const index = Number(target.dataset.actionIndex);
@@ -628,7 +692,14 @@ function handleActionChecklistChange(event) {
   if (!actions[index]) {
     return;
   }
-  actions[index].done = target.checked;
+  const field = target.dataset.field;
+  if (field === "done" && target instanceof HTMLInputElement) {
+    actions[index].done = target.checked;
+  } else if (field === "dueDate" && target instanceof HTMLInputElement) {
+    actions[index].dueDate = target.value || "";
+  } else if (field === "reminder") {
+    actions[index].reminder = target.value || "none";
+  }
   syncCurrentSessionToHistory();
   renderActionPlan();
 }
@@ -650,9 +721,9 @@ function normalizeActionPlan(plan) {
   const fallback = {
     summary: "请先描述你看到的画面，再把联想到的现实议题写下来。",
     actions: [
-      { text: "写下今天最想解决的 1 个问题，限定在一句话内。", done: false },
-      { text: "选 1 位可对话对象，约一个 15 分钟沟通时段。", done: false },
-      { text: "72 小时后复盘：记录这次行动带来的变化。", done: false }
+      { text: "写下今天最想解决的 1 个问题，限定在一句话内。", done: false, dueDate: "", reminder: "none" },
+      { text: "选 1 位可对话对象，约一个 15 分钟沟通时段。", done: false, dueDate: "", reminder: "none" },
+      { text: "72 小时后复盘：记录这次行动带来的变化。", done: false, dueDate: "", reminder: "none" }
     ]
   };
   if (!plan || typeof plan !== "object") {
@@ -669,7 +740,12 @@ function normalizeActionPlan(plan) {
       if (!text) {
         return null;
       }
-      return { text, done: Boolean(item.done) };
+      return {
+        text,
+        done: Boolean(item.done),
+        dueDate: typeof item.dueDate === "string" ? item.dueDate : "",
+        reminder: normalizeReminder(item.reminder)
+      };
     })
     .filter(Boolean)
     .slice(0, 3);
@@ -683,6 +759,53 @@ function normalizeActionPlan(plan) {
   }
 
   return { summary, actions };
+}
+
+function normalizeReminder(value) {
+  const valid = new Set(["none", "same-day", "1-day", "3-day"]);
+  return valid.has(value) ? value : "none";
+}
+
+function reminderLabel(reminder) {
+  const map = {
+    none: "不提醒",
+    "same-day": "当天提醒",
+    "1-day": "提前 1 天",
+    "3-day": "提前 3 天"
+  };
+  return map[normalizeReminder(reminder)] || "不提醒";
+}
+
+function updateActionStats(plan) {
+  const total = plan.actions.length || 1;
+  const doneCount = plan.actions.filter((item) => item.done).length;
+  const ratio = Math.round((doneCount / total) * 100);
+  const now = new Date();
+  now.setHours(0, 0, 0, 0);
+  const overdue = plan.actions.filter((item) => !item.done && item.dueDate && new Date(item.dueDate).getTime() < now.getTime()).length;
+  const upcoming = plan.actions.filter((item) => !item.done && item.dueDate && new Date(item.dueDate).getTime() >= now.getTime()).length;
+  const remindNow = plan.actions.filter((item) => shouldRemindToday(item, now)).length;
+  refs.actionStats.textContent = `完成率：${ratio}%（${doneCount}/${total}） · 逾期 ${overdue} · 待办 ${upcoming} · 今日提醒 ${remindNow}`;
+}
+
+function shouldRemindToday(action, nowDate) {
+  if (action.done || !action.dueDate || normalizeReminder(action.reminder) === "none") {
+    return false;
+  }
+  const due = new Date(action.dueDate);
+  due.setHours(0, 0, 0, 0);
+  if (Number.isNaN(due.getTime())) {
+    return false;
+  }
+  const offsetMap = {
+    "same-day": 0,
+    "1-day": 1,
+    "3-day": 3
+  };
+  const offset = offsetMap[normalizeReminder(action.reminder)] ?? 0;
+  const remind = new Date(due);
+  remind.setDate(remind.getDate() - offset);
+  return remind.getTime() <= nowDate.getTime() && due.getTime() >= nowDate.getTime();
 }
 
 function buildActionPlan(cards, question, note, mode) {
@@ -702,24 +825,39 @@ function buildActionPlan(cards, question, note, mode) {
   const questionText = question || "当前议题";
   const noteHint = note ? `你在记录里提到“${note.slice(0, 20)}${note.length > 20 ? "..." : ""}”，` : "";
   const summary = `在「${modeName}」中，牌面 ${leadCards.join(" / ")} 指向了「${primaryKeywords.join("、") || "看见-联想-行动"}」这条主线。${noteHint}建议先把「${questionText}」收敛成一个可执行小目标。`;
+  const day1 = offsetDateString(1);
+  const day3 = offsetDateString(3);
+  const day7 = offsetDateString(7);
 
   return {
     summary,
     actions: [
       {
         text: `今天 10 分钟：围绕「${questionText}」写下 3 个你能控制的动作，只保留最小的一步。`,
-        done: false
+        done: false,
+        dueDate: day1,
+        reminder: "same-day"
       },
       {
         text: `24 小时内：把牌面里最触动你的词（如「${primaryKeywords[0] || "核心线索"}」）转成一条现实沟通或尝试。`,
-        done: false
+        done: false,
+        dueDate: day3,
+        reminder: "1-day"
       },
       {
         text: "72 小时复盘：检查这一步是否降低了内耗，并决定是继续、调整还是停止。",
-        done: false
+        done: false,
+        dueDate: day7,
+        reminder: "3-day"
       }
     ]
   };
+}
+
+function offsetDateString(offsetDays) {
+  const date = new Date();
+  date.setDate(date.getDate() + offsetDays);
+  return `${date.getFullYear()}-${pad2(date.getMonth() + 1)}-${pad2(date.getDate())}`;
 }
 
 function renderDeckValidation() {
@@ -886,7 +1024,8 @@ function runDraw() {
       cards,
       note: "",
       lastExportAt: "",
-      actionPlan: normalizeActionPlan(buildActionPlan(cards, refs.questionInput.value.trim(), refs.noteInput.value.trim(), mode))
+      actionPlan: normalizeActionPlan(buildActionPlan(cards, refs.questionInput.value.trim(), refs.noteInput.value.trim(), mode)),
+      tags: inferSessionTags(refs.questionInput.value.trim(), "", cards)
     };
 
     state.currentSession = session;
@@ -1206,7 +1345,8 @@ function syncCurrentSessionToHistory() {
       deckTypeId: state.deckTypeId,
       layoutDirection: state.layoutDirection,
       actionPlan: normalizeActionPlan(state.currentSession.actionPlan),
-      lastExportAt: state.currentSession.lastExportAt || ""
+      lastExportAt: state.currentSession.lastExportAt || "",
+      tags: inferSessionTags(refs.questionInput.value.trim(), refs.noteInput.value.trim(), state.currentCards)
     };
   });
   persistHistory();
@@ -1222,7 +1362,16 @@ function renderHistory() {
     return;
   }
 
-  state.history.forEach((session) => {
+  const filteredHistory = getFilteredHistory();
+  if (filteredHistory.length === 0) {
+    const empty = document.createElement("p");
+    empty.className = "history-empty";
+    empty.textContent = "当前筛选下没有记录。你可以清空搜索词或切换标签。";
+    refs.historyList.appendChild(empty);
+    return;
+  }
+
+  filteredHistory.forEach((session) => {
     const item = document.createElement("article");
     item.className = "history-item";
     const mode = MODES[session.modeId];
@@ -1230,6 +1379,8 @@ function renderHistory() {
     const layoutDirection = LAYOUT_DIRECTIONS[session.layoutDirection] || LAYOUT_DIRECTIONS.up;
     const actionPlan = normalizeActionPlan(session.actionPlan);
     const doneCount = actionPlan.actions.filter((item) => item.done).length;
+    const tags = Array.isArray(session.tags) ? session.tags : [];
+    const tagHtml = tags.map((tag) => `<span>${escapeHTML(tagLabel(tag))}</span>`).join("");
 
     const time = new Date(session.time);
     const localTime = `${time.getFullYear()}-${pad2(time.getMonth() + 1)}-${pad2(time.getDate())} ${pad2(
@@ -1242,12 +1393,35 @@ function renderHistory() {
       <p>牌面：${escapeHTML((session.cards || []).map((card) => getCardShortName(card)).join(" / "))}</p>
       <p>笔记：${escapeHTML(session.note || "（未记录）")}</p>
       <p>行动进度：${doneCount}/3</p>
+      <p class="history-tag">${tagHtml || "<span>未分类</span>"}</p>
       <div class="actions compact">
         <button class="btn btn-ghost" data-action="replay" data-id="${escapeHTML(session.id)}">回看此局</button>
         <button class="btn btn-danger" data-action="remove" data-id="${escapeHTML(session.id)}">删除</button>
       </div>
     `;
     refs.historyList.appendChild(item);
+  });
+}
+
+function getFilteredHistory() {
+  return state.history.filter((session) => {
+    const tags = Array.isArray(session.tags) ? session.tags : inferSessionTags(session.question || "", session.note || "", session.cards || []);
+    if (state.historyTag !== "all" && !tags.includes(state.historyTag)) {
+      return false;
+    }
+    if (!state.historyQuery) {
+      return true;
+    }
+    const query = state.historyQuery.toLowerCase();
+    const bag = [
+      session.question || "",
+      session.note || "",
+      (session.cards || []).map((card) => getCardShortName(card)).join(" "),
+      tags.map((tag) => tagLabel(tag)).join(" ")
+    ]
+      .join(" ")
+      .toLowerCase();
+    return bag.includes(query);
   });
 }
 
@@ -1284,6 +1458,9 @@ function handleHistoryAction(event) {
     } else {
       session.actionPlan = normalizeActionPlan(session.actionPlan);
     }
+    session.tags = Array.isArray(session.tags) && session.tags.length
+      ? session.tags
+      : inferSessionTags(session.question || "", session.note || "", session.cards || []);
     state.currentSession = session;
     state.currentCards = session.cards || [];
     state.layerId = "description";
@@ -1340,7 +1517,10 @@ async function copyCurrentReport() {
     "复盘总结：",
     `- ${actionPlan.summary}`,
     "行动建议：",
-    ...actionPlan.actions.map((item, index) => `- [${item.done ? "x" : " "}] ${index + 1}. ${item.text}`),
+    ...actionPlan.actions.map((item, index) => {
+      const duePart = item.dueDate ? `（截止 ${item.dueDate} / ${reminderLabel(item.reminder)}）` : "";
+      return `- [${item.done ? "x" : " "}] ${index + 1}. ${item.text}${duePart}`;
+    }),
     `笔记：${refs.noteInput.value.trim() || "（未填写）"}`
   ].join("\n");
 
@@ -1487,7 +1667,6 @@ async function importDeckFromFile(file, type) {
       state.deckSource.word = "custom";
       setSummary(`已导入字卡 ${parsed.length} 张。`, false);
     } else {
-      const parsed = raw.map((entry) => normalizeImageCard(entry)).filter(Boolean);
       if (parsed.length < 5) {
         throw new Error("图卡数量太少，至少需要 5 张。");
       }
@@ -1588,6 +1767,201 @@ async function loadImageMeta(url) {
     image.onload = () => resolve({ width: image.naturalWidth, height: image.naturalHeight });
     image.onerror = () => resolve(null);
     image.src = url;
+  });
+}
+
+function setupDeckDropzone() {
+  const zone = refs.deckDropzone;
+  if (!zone || zone.dataset.bound === "1") {
+    return;
+  }
+  zone.dataset.bound = "1";
+  const enter = (event) => {
+    event.preventDefault();
+    zone.classList.add("is-dragover");
+  };
+  const leave = () => {
+    zone.classList.remove("is-dragover");
+  };
+  zone.addEventListener("dragenter", enter);
+  zone.addEventListener("dragover", enter);
+  zone.addEventListener("dragleave", leave);
+  zone.addEventListener("drop", async (event) => {
+    event.preventDefault();
+    leave();
+    const files = Array.from(event.dataTransfer?.files || []);
+    await buildDeckFromImageFiles(files, refs.deckBuildTarget.value);
+  });
+}
+
+async function buildDeckFromImageFiles(files, targetType) {
+  const images = files.filter((file) => file.type.startsWith("image/"));
+  if (images.length < 5) {
+    setSummary("至少选择 5 张图片才能生成卡包。", true);
+    return;
+  }
+  const sorted = images.slice().sort((a, b) => a.name.localeCompare(b.name, "zh-Hans-CN", { numeric: true }));
+  const raw = [];
+  for (let i = 0; i < sorted.length; i += 1) {
+    const file = sorted[i];
+    const base = normalizeFileBaseName(file.name);
+    const dataUrl = await fileToDataUrl(file);
+    if (targetType === "word") {
+      raw.push({
+        name: base || `字卡${String(i + 1).padStart(3, "0")}`,
+        image: dataUrl,
+        cue: ""
+      });
+    } else {
+      raw.push({
+        name: base || `图卡${String(i + 1).padStart(3, "0")}`,
+        image: dataUrl,
+        cue: ""
+      });
+    }
+  }
+
+  const parsed =
+    targetType === "word"
+      ? raw.map((entry) => normalizeWordCard(entry)).filter(Boolean)
+      : raw.map((entry) => normalizeImageCard(entry)).filter(Boolean);
+  const validation = await buildDeckValidationReport(raw, parsed, targetType);
+  state.deckValidation = validation;
+  renderDeckValidation();
+
+  if (targetType === "word") {
+    state.wordDeck = parsed;
+    state.deckSource.word = "custom";
+  } else {
+    state.imageDeck = parsed;
+    state.deckSource.image = "custom";
+  }
+  persistCustomDecks();
+  renderDeckStatus();
+  renderWorkflowSteps();
+  warmupPreload();
+  downloadJsonFile(parsed, `oh-${targetType}-deck-auto.json`);
+  setSummary(`已从 ${sorted.length} 张图片生成${targetType === "word" ? "字卡" : "图卡"}卡包。`, false);
+}
+
+function normalizeFileBaseName(name) {
+  return String(name || "")
+    .replace(/\.[a-z0-9]+$/i, "")
+    .replace(/[_-]+/g, " ")
+    .trim();
+}
+
+async function fileToDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ""));
+    reader.onerror = () => reject(new Error("图片读取失败"));
+    reader.readAsDataURL(file);
+  });
+}
+
+function downloadJsonFile(data, filename) {
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json;charset=utf-8" });
+  downloadBlob(blob, filename);
+}
+
+function batchRenameCurrentDeck() {
+  const target = refs.deckBuildTarget.value;
+  const prefix = refs.deckBatchPrefix.value.trim() || (target === "word" ? "字卡" : "图卡");
+  const source = target === "word" ? state.wordDeck : state.imageDeck;
+  if (!Array.isArray(source) || source.length === 0) {
+    setSummary("当前卡组为空，无法批量重命名。", true);
+    return;
+  }
+  const renamed = source.map((card, index) => ({ ...card, name: `${prefix}${String(index + 1).padStart(3, "0")}` }));
+  if (target === "word") {
+    state.wordDeck = renamed;
+    state.deckSource.word = "custom";
+  } else {
+    state.imageDeck = renamed;
+    state.deckSource.image = "custom";
+  }
+  persistCustomDecks();
+  renderDeckStatus();
+  state.deckValidation = {
+    summary: `已完成${target === "word" ? "字卡" : "图卡"}批量重命名，建议再次校验后抽卡。`,
+    items: []
+  };
+  renderDeckValidation();
+  if (state.currentCards.length > 0) {
+    renderSpread(state.currentCards, MODES[state.modeId].labels);
+  }
+  setSummary(`已将${target === "word" ? "字卡" : "图卡"}批量重命名为「${prefix}001...」。`, false);
+}
+
+async function fixCurrentDeckImageRatio() {
+  const target = refs.deckBuildTarget.value;
+  const source = target === "word" ? state.wordDeck : state.imageDeck;
+  if (!Array.isArray(source) || source.length === 0) {
+    setSummary("当前卡组为空，无法修复比例。", true);
+    return;
+  }
+  setSummary("正在修复图片比例，请稍候...", false);
+  const fixed = [];
+  for (const card of source) {
+    const image = card.image ? await fitImageToRatio(card.image, COMPOSITE_BASE_RATIO) : "";
+    fixed.push({ ...card, image: image || card.image });
+  }
+  if (target === "word") {
+    state.wordDeck = fixed;
+    state.deckSource.word = "custom";
+  } else {
+    state.imageDeck = fixed;
+    state.deckSource.image = "custom";
+  }
+  persistCustomDecks();
+  renderDeckStatus();
+  warmupPreload();
+  const raw = fixed.map((card) => ({ name: card.name, image: card.image }));
+  state.deckValidation = await buildDeckValidationReport(raw, fixed, target);
+  renderDeckValidation();
+  if (state.currentCards.length > 0) {
+    renderSpread(state.currentCards, MODES[state.modeId].labels);
+    renderPrompts();
+  }
+  setSummary(`已完成${target === "word" ? "字卡" : "图卡"}比例修复。`, false);
+}
+
+async function fitImageToRatio(src, targetRatio) {
+  return new Promise((resolve) => {
+    const image = new Image();
+    image.onload = () => {
+      const imgRatio = image.naturalWidth / image.naturalHeight;
+      let canvasWidth = image.naturalWidth;
+      let canvasHeight = image.naturalHeight;
+      if (imgRatio > targetRatio) {
+        canvasHeight = Math.round(canvasWidth / targetRatio);
+      } else {
+        canvasWidth = Math.round(canvasHeight * targetRatio);
+      }
+      const canvas = document.createElement("canvas");
+      canvas.width = canvasWidth;
+      canvas.height = canvasHeight;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) {
+        resolve(src);
+        return;
+      }
+      ctx.fillStyle = "#f5f5f5";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      const drawW = imgRatio > targetRatio ? canvasWidth : Math.round(canvasHeight * imgRatio);
+      const drawH = imgRatio > targetRatio ? Math.round(canvasWidth / imgRatio) : canvasHeight;
+      const dx = Math.round((canvasWidth - drawW) / 2);
+      const dy = Math.round((canvasHeight - drawH) / 2);
+      ctx.drawImage(image, dx, dy, drawW, drawH);
+      try {
+        resolve(canvas.toDataURL("image/jpeg", 0.9));
+      } catch (error) {
+        resolve(src);
+      }
+    };
+    image.onerror = () => resolve(src);
+    image.src = src;
   });
 }
 
@@ -1896,6 +2270,37 @@ function getCardShortName(card) {
   return card.name;
 }
 
+function inferSessionTags(question, note, cards) {
+  const text = `${question || ""} ${note || ""} ${(cards || []).map((card) => getCardShortName(card)).join(" ")}`.toLowerCase();
+  const tags = [];
+  if (/(工作|职业|项目|老板|上司|同事|转型|收入|面试|职场)/.test(text)) {
+    tags.push("work");
+  }
+  if (/(关系|亲密|伴侣|婚姻|家人|朋友|沟通|冲突|父母)/.test(text)) {
+    tags.push("relationship");
+  }
+  if (/(情绪|焦虑|压力|恐惧|悲伤|愤怒|开心|抑郁|内耗)/.test(text)) {
+    tags.push("emotion");
+  }
+  if (/(选择|决策|决定|方向|下一步|怎么做|计划|策略)/.test(text)) {
+    tags.push("decision");
+  }
+  if (tags.length === 0) {
+    tags.push("decision");
+  }
+  return uniqueValues(tags);
+}
+
+function tagLabel(tag) {
+  const labels = {
+    work: "工作",
+    relationship: "关系",
+    emotion: "情绪",
+    decision: "决策"
+  };
+  return labels[tag] || "未分类";
+}
+
 function inferDeckTypeFromCards(cards) {
   if (!Array.isArray(cards) || cards.length === 0) {
     return "word";
@@ -1933,6 +2338,8 @@ function applyPairRotation(viewport, quarter) {
   viewport.classList.remove(...ROTATION_CLASSES);
   viewport.classList.add(ROTATION_CLASSES[normalized]);
   refreshPairViewportFit(viewport);
+  const composite = viewport.querySelector(".pair-composite");
+  clampCompositePan(viewport, composite, true);
 }
 
 function rotatePairViewport(viewport, deltaQuarter) {
@@ -1965,7 +2372,7 @@ function makePreviewableImage(imageElement, titleText) {
     return;
   }
   imageElement.classList.add("previewable-image");
-  imageElement.dataset.previewSrc = imageElement.src || "";
+  imageElement.dataset.previewSrc = imageElement.dataset.fullSrc || imageElement.currentSrc || imageElement.src || "";
   imageElement.dataset.previewTitle = titleText || imageElement.alt || "";
 }
 
@@ -2033,6 +2440,7 @@ function openPairPreview(imageSrc, wordSrc, title, quarter, sourceViewport = nul
   applyPreviewPairRotation(quarter);
   updatePreviewFitToggle();
   setCompositeGestureScale(refs.previewPairComposite, 1);
+  setCompositePan(refs.previewPairComposite, 0, 0);
   refs.previewTitle.textContent = title || "图卡 + 字卡";
   refs.imagePreviewModal.hidden = false;
   document.body.style.overflow = "hidden";
@@ -2075,6 +2483,7 @@ function closeImagePreview() {
   refs.previewPairWord.classList.remove("smart-thumb-loading");
   applyPreviewPairRotation(0);
   setCompositeGestureScale(refs.previewPairComposite, 1);
+  setCompositePan(refs.previewPairComposite, 0, 0);
   refs.previewTitle.textContent = "";
   document.body.style.overflow = "";
 }
@@ -2086,6 +2495,224 @@ function setCompositeGestureScale(element, scale) {
   const clamped = Math.max(0.75, Math.min(2.6, Number(scale) || 1));
   element.dataset.gestureScale = String(clamped);
   element.style.setProperty("--gesture-scale", String(clamped));
+  const pairViewport = element.closest(".pair-viewport");
+  if (pairViewport) {
+    refreshPairViewportFit(pairViewport);
+    clampCompositePan(pairViewport, element, true);
+    return;
+  }
+  if (element === refs.previewPairComposite) {
+    refreshPreviewViewportFit();
+    clampCompositePan(refs.previewPairViewport, refs.previewPairComposite, true);
+  }
+}
+
+function setCompositePan(element, x, y) {
+  if (!element) {
+    return;
+  }
+  element.dataset.panX = String(x);
+  element.dataset.panY = String(y);
+  element.style.setProperty("--pan-x", `${x.toFixed(2)}px`);
+  element.style.setProperty("--pan-y", `${y.toFixed(2)}px`);
+}
+
+function getCompositePan(element) {
+  if (!element) {
+    return { x: 0, y: 0 };
+  }
+  const x = Number(element.dataset.panX || "0");
+  const y = Number(element.dataset.panY || "0");
+  return { x: Number.isFinite(x) ? x : 0, y: Number.isFinite(y) ? y : 0 };
+}
+
+function clampCompositePan(viewport, composite, animate) {
+  const { x, y } = getCompositePan(composite);
+  const bounds = computePanBounds(viewport, composite);
+  const nx = Math.max(-bounds.maxX, Math.min(bounds.maxX, x));
+  const ny = Math.max(-bounds.maxY, Math.min(bounds.maxY, y));
+  if (animate) {
+    composite.style.transition = "transform 0.24s cubic-bezier(0.2, 0.9, 0.3, 1.05)";
+    requestAnimationFrame(() => {
+      setCompositePan(composite, nx, ny);
+      setTimeout(() => {
+        composite.style.transition = "";
+      }, 240);
+    });
+  } else {
+    setCompositePan(composite, nx, ny);
+  }
+}
+
+function computePanBounds(viewport, composite) {
+  if (!viewport || !composite) {
+    return { maxX: 0, maxY: 0 };
+  }
+  const viewportRect = viewport.getBoundingClientRect();
+  const style = getComputedStyle(viewport);
+  const paddingX = parseFloat(style.paddingLeft || "0") + parseFloat(style.paddingRight || "0");
+  const paddingY = parseFloat(style.paddingTop || "0") + parseFloat(style.paddingBottom || "0");
+  const availableW = Math.max(120, viewportRect.width - paddingX);
+  const availableH = Math.max(120, viewportRect.height - paddingY);
+  const quarter = normalizeQuarter(Number(viewport.dataset.rotationQuarter || composite.dataset.rotationQuarter || 0));
+  const baseWidth = composite.offsetWidth || Math.min(availableW, 560);
+  const baseHeight = composite.offsetHeight || baseWidth / COMPOSITE_BASE_RATIO;
+  const rotatedWidth = quarter % 2 === 0 ? baseWidth : baseHeight;
+  const rotatedHeight = quarter % 2 === 0 ? baseHeight : baseWidth;
+  const effectiveScale = getCompositeScaleMultiplier(composite);
+  const drawnW = rotatedWidth * effectiveScale;
+  const drawnH = rotatedHeight * effectiveScale;
+  return {
+    maxX: Math.max(0, (drawnW - availableW) / 2),
+    maxY: Math.max(0, (drawnH - availableH) / 2)
+  };
+}
+
+function getCompositeScaleMultiplier(composite) {
+  if (!composite) {
+    return 1;
+  }
+  const style = getComputedStyle(composite);
+  const fitScale = Number(style.getPropertyValue("--fit-scale") || "1");
+  const gestureScale = Number(style.getPropertyValue("--gesture-scale") || "1");
+  const previewZoom = Number(style.getPropertyValue("--preview-zoom") || "1");
+  const pressScale = Number(style.getPropertyValue("--press-scale") || "1");
+  const focusScale = Number(style.getPropertyValue("--focus-scale") || "1");
+  return fitScale * gestureScale * previewZoom * pressScale * focusScale;
+}
+
+function toggleTapZoomAtPoint(viewport, composite, clientX, clientY) {
+  if (!viewport || !composite) {
+    return;
+  }
+  const currentScale = Number(composite.dataset.gestureScale || 1);
+  if (currentScale > 1.18) {
+    setCompositeGestureScale(composite, 1);
+    setCompositePan(composite, 0, 0);
+    return;
+  }
+  const rect = viewport.getBoundingClientRect();
+  const centerX = rect.left + rect.width / 2;
+  const centerY = rect.top + rect.height / 2;
+  const offsetX = clientX - centerX;
+  const offsetY = clientY - centerY;
+  const targetScale = 1.85;
+  setCompositeGestureScale(composite, targetScale);
+  setCompositePan(composite, -offsetX * 0.74, -offsetY * 0.74);
+  clampCompositePan(viewport, composite, true);
+}
+
+function setupDragPhysics(viewport, composite) {
+  if (!viewport || !composite || viewport.dataset.dragPhysicsBound === "1") {
+    return;
+  }
+  viewport.dataset.dragPhysicsBound = "1";
+  const stateBag = {
+    pointerId: null,
+    isDragging: false,
+    startX: 0,
+    startY: 0,
+    startPanX: 0,
+    startPanY: 0,
+    velocityX: 0,
+    velocityY: 0,
+    lastX: 0,
+    lastY: 0,
+    lastTs: 0,
+    raf: 0
+  };
+  state.dragPanStates.set(viewport, stateBag);
+
+  const stopInertia = () => {
+    if (stateBag.raf) {
+      cancelAnimationFrame(stateBag.raf);
+      stateBag.raf = 0;
+    }
+  };
+
+  const onPointerDown = (event) => {
+    if (event.button !== 0 || refs.imagePreviewModal.hidden && viewport === refs.previewPairViewport) {
+      return;
+    }
+    stopInertia();
+    stateBag.pointerId = event.pointerId;
+    stateBag.isDragging = true;
+    const pan = getCompositePan(composite);
+    stateBag.startPanX = pan.x;
+    stateBag.startPanY = pan.y;
+    stateBag.startX = event.clientX;
+    stateBag.startY = event.clientY;
+    stateBag.lastX = event.clientX;
+    stateBag.lastY = event.clientY;
+    stateBag.lastTs = performance.now();
+    stateBag.velocityX = 0;
+    stateBag.velocityY = 0;
+    viewport.setPointerCapture?.(event.pointerId);
+  };
+
+  const onPointerMove = (event) => {
+    if (!stateBag.isDragging || stateBag.pointerId !== event.pointerId) {
+      return;
+    }
+    const dx = event.clientX - stateBag.startX;
+    const dy = event.clientY - stateBag.startY;
+    const bounds = computePanBounds(viewport, composite);
+    const limitX = bounds.maxX + 80;
+    const limitY = bounds.maxY + 80;
+    const nx = Math.max(-limitX, Math.min(limitX, stateBag.startPanX + dx));
+    const ny = Math.max(-limitY, Math.min(limitY, stateBag.startPanY + dy));
+    setCompositePan(composite, nx, ny);
+    const now = performance.now();
+    const dt = Math.max(1, now - stateBag.lastTs);
+    stateBag.velocityX = (event.clientX - stateBag.lastX) / dt;
+    stateBag.velocityY = (event.clientY - stateBag.lastY) / dt;
+    stateBag.lastX = event.clientX;
+    stateBag.lastY = event.clientY;
+    stateBag.lastTs = now;
+  };
+
+  const onPointerUp = (event) => {
+    if (!stateBag.isDragging || stateBag.pointerId !== event.pointerId) {
+      return;
+    }
+    stateBag.isDragging = false;
+    viewport.releasePointerCapture?.(event.pointerId);
+    const decay = 0.92;
+    const spring = () => {
+      const pan = getCompositePan(composite);
+      let vx = stateBag.velocityX * 16;
+      let vy = stateBag.velocityY * 16;
+      let x = pan.x + vx;
+      let y = pan.y + vy;
+      stateBag.velocityX *= decay;
+      stateBag.velocityY *= decay;
+      const bounds = computePanBounds(viewport, composite);
+      if (x < -bounds.maxX || x > bounds.maxX) {
+        x = x < -bounds.maxX ? (x + -bounds.maxX) / 2 : (x + bounds.maxX) / 2;
+        stateBag.velocityX *= 0.55;
+      }
+      if (y < -bounds.maxY || y > bounds.maxY) {
+        y = y < -bounds.maxY ? (y + -bounds.maxY) / 2 : (y + bounds.maxY) / 2;
+        stateBag.velocityY *= 0.55;
+      }
+      setCompositePan(composite, x, y);
+      if (Math.abs(stateBag.velocityX) < 0.01 && Math.abs(stateBag.velocityY) < 0.01) {
+        clampCompositePan(viewport, composite, true);
+        stateBag.raf = 0;
+        return;
+      }
+      stateBag.raf = requestAnimationFrame(spring);
+    };
+    stateBag.raf = requestAnimationFrame(spring);
+  };
+
+  viewport.addEventListener("pointerdown", onPointerDown);
+  viewport.addEventListener("pointermove", onPointerMove);
+  viewport.addEventListener("pointerup", onPointerUp);
+  viewport.addEventListener("pointercancel", onPointerUp);
+  viewport.addEventListener("dblclick", (event) => {
+    toggleTapZoomAtPoint(viewport, composite, event.clientX, event.clientY);
+  });
 }
 
 function setupPairViewportGestures(viewport) {
@@ -2093,24 +2720,29 @@ function setupPairViewportGestures(viewport) {
     return;
   }
   viewport.dataset.gestureBound = "1";
+  const composite = viewport.querySelector(".pair-composite");
+  setupDragPhysics(viewport, composite);
   attachTouchGestures(viewport, {
     onScale: (scale) => {
-      setCompositeGestureScale(viewport.querySelector(".pair-composite"), scale);
+      setCompositeGestureScale(composite, scale);
     },
     onSwipe: (direction) => {
       rotatePairViewport(viewport, direction > 0 ? 1 : -1);
     },
-    onReset: () => {
-      setCompositeGestureScale(viewport.querySelector(".pair-composite"), 1);
+    onDoubleTap: (x, y) => {
+      toggleTapZoomAtPoint(viewport, composite, x, y);
+    },
+    onReset: (x, y) => {
+      toggleTapZoomAtPoint(viewport, composite, x, y);
     },
     getScale: () => {
-      const composite = viewport.querySelector(".pair-composite");
       return Number(composite?.dataset.gestureScale || 1);
     }
   });
 }
 
 function setupPreviewPairGestures() {
+  setupDragPhysics(refs.previewPairViewport, refs.previewPairComposite);
   attachTouchGestures(refs.previewPairViewport, {
     onScale: (scale) => {
       setCompositeGestureScale(refs.previewPairComposite, scale);
@@ -2118,8 +2750,11 @@ function setupPreviewPairGestures() {
     onSwipe: (direction) => {
       rotatePreviewPair(direction > 0 ? 1 : -1);
     },
-    onReset: () => {
-      setCompositeGestureScale(refs.previewPairComposite, 1);
+    onDoubleTap: (x, y) => {
+      toggleTapZoomAtPoint(refs.previewPairViewport, refs.previewPairComposite, x, y);
+    },
+    onReset: (x, y) => {
+      toggleTapZoomAtPoint(refs.previewPairViewport, refs.previewPairComposite, x, y);
     },
     getScale: () => Number(refs.previewPairComposite.dataset.gestureScale || 1)
   });
@@ -2201,7 +2836,10 @@ function attachTouchGestures(target, options) {
       if (!moved && duration < 260) {
         const now = Date.now();
         if (now - lastTapTime < 280) {
-          options.onReset?.();
+          options.onDoubleTap?.(changed.clientX, changed.clientY);
+          if (!options.onDoubleTap) {
+            options.onReset?.(changed.clientX, changed.clientY);
+          }
           lastTapTime = 0;
         } else {
           lastTapTime = now;
@@ -2233,6 +2871,7 @@ function refreshPairViewportFit(viewport) {
   const quarter = normalizeQuarter(Number(viewport.dataset.rotationQuarter || 0));
   const scale = computeViewportFitScale(viewport, composite, quarter, "fit");
   composite.style.setProperty("--fit-scale", String(scale));
+  clampCompositePan(viewport, composite, false);
 }
 
 function refreshPreviewViewportFit() {
@@ -2240,6 +2879,7 @@ function refreshPreviewViewportFit() {
   const scale = computeViewportFitScale(refs.previewPairViewport, refs.previewPairComposite, quarter, state.previewFitMode);
   refs.previewPairComposite.style.setProperty("--fit-scale", String(scale));
   refs.previewPairComposite.style.setProperty("--preview-zoom", state.previewFitMode === "full" ? "1.12" : "1");
+  clampCompositePan(refs.previewPairViewport, refs.previewPairComposite, false);
 }
 
 function scheduleRefreshViewportFits() {
@@ -2442,6 +3082,7 @@ function applySmartImageSource(element, url) {
     return;
   }
   element.dataset.fullSrc = url;
+  element.dataset.previewSrc = url;
   const thumb = state.thumbnailCache.get(url);
   if (thumb) {
     element.src = thumb;
@@ -2534,6 +3175,51 @@ async function exportSessionAsset(type) {
     return;
   }
   try {
+    if (type === "poster") {
+      const posterCanvas = await buildPosterCanvas();
+      posterCanvas.toBlob((blob) => {
+        if (!blob) {
+          setSummary("导出海报失败。", true);
+          return;
+        }
+        downloadBlob(blob, buildExportFilename("png").replace("oh-report", "oh-poster"));
+        markExportCompleted();
+        setSummary("已导出卡面海报 PNG。", false);
+      }, "image/png");
+      return;
+    }
+
+    if (type === "a4pdf") {
+      const canvas = await buildSessionCanvas();
+      const PdfClass = window.jspdf?.jsPDF;
+      if (!PdfClass) {
+        setSummary("PDF 组件未加载，无法导出 A4。", true);
+        return;
+      }
+      const pdf = new PdfClass({ orientation: "portrait", unit: "mm", format: "a4" });
+      const pageW = 210;
+      const pageH = 297;
+      const margin = 10;
+      const availableW = pageW - margin * 2;
+      const availableH = pageH - margin * 2;
+      const imageRatio = canvas.width / canvas.height;
+      const boxRatio = availableW / availableH;
+      let drawW = availableW;
+      let drawH = availableH;
+      if (imageRatio > boxRatio) {
+        drawH = drawW / imageRatio;
+      } else {
+        drawW = drawH * imageRatio;
+      }
+      const x = (pageW - drawW) / 2;
+      const y = margin + (availableH - drawH) / 2;
+      pdf.addImage(canvas.toDataURL("image/png"), "PNG", x, y, drawW, drawH);
+      pdf.save(buildExportFilename("pdf").replace("oh-report", "oh-a4-report"));
+      markExportCompleted();
+      setSummary("已导出可打印 A4 PDF。", false);
+      return;
+    }
+
     const canvas = await buildSessionCanvas();
     if (type === "png") {
       canvas.toBlob((blob) => {
@@ -2594,6 +3280,43 @@ function downloadBlob(blob, filename) {
   link.click();
   document.body.removeChild(link);
   URL.revokeObjectURL(url);
+}
+
+async function buildPosterCanvas() {
+  const cards = state.currentCards.slice(0, 5);
+  const columns = cards.length >= 4 ? 2 : cards.length;
+  const rows = Math.ceil(cards.length / columns);
+  const cardWidth = 560;
+  const cardHeight = Math.round((cardWidth * 1312) / 1045);
+  const gap = 28;
+  const padding = 42;
+  const canvasWidth = padding * 2 + columns * cardWidth + (columns - 1) * gap;
+  const canvasHeight = padding * 2 + rows * cardHeight + (rows - 1) * gap + 88;
+  const canvas = document.createElement("canvas");
+  canvas.width = canvasWidth;
+  canvas.height = canvasHeight;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) {
+    throw new Error("海报画布初始化失败");
+  }
+  ctx.fillStyle = "#f8f3ea";
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.fillStyle = "#2d261f";
+  ctx.font = "700 42px 'Noto Serif SC', serif";
+  ctx.fillText("OH Card Poster", padding, 58);
+  ctx.font = "400 18px 'Noto Serif SC', serif";
+  ctx.fillStyle = "#655444";
+  ctx.fillText(new Date().toLocaleString(), padding, 84);
+
+  for (let index = 0; index < cards.length; index += 1) {
+    const row = Math.floor(index / columns);
+    const col = index % columns;
+    const x = padding + col * (cardWidth + gap);
+    const y = padding + 92 + row * (cardHeight + gap);
+    await drawExportCard(ctx, cards[index], x, y, cardWidth, cardHeight);
+  }
+
+  return canvas;
 }
 
 async function buildSessionCanvas() {
@@ -2816,7 +3539,20 @@ function loadHistory() {
     if (!Array.isArray(parsed)) {
       return [];
     }
-    return parsed.filter((entry) => entry && Array.isArray(entry.cards) && typeof entry.id === "string");
+    return parsed
+      .filter((entry) => entry && Array.isArray(entry.cards) && typeof entry.id === "string")
+      .map((entry) => {
+        const question = typeof entry.question === "string" ? entry.question : "";
+        const note = typeof entry.note === "string" ? entry.note : "";
+        return {
+          ...entry,
+          question,
+          note,
+          actionPlan: normalizeActionPlan(entry.actionPlan),
+          tags: Array.isArray(entry.tags) ? entry.tags : inferSessionTags(question, note, entry.cards || []),
+          lastExportAt: typeof entry.lastExportAt === "string" ? entry.lastExportAt : ""
+        };
+      });
   } catch (error) {
     console.error("loadHistory failed", error);
     return [];
