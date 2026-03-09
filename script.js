@@ -261,7 +261,7 @@ const CURRENT_SESSION_STORAGE_KEY = "oh-card-current-session-v1";
 const SLOT_TEMPLATE_STORAGE_KEY = "oh-card-slot-template-v1";
 const UI_PREF_STORAGE_KEY = "oh-card-ui-pref-v1";
 const CLOUD_SYNC_STORAGE_KEY = "oh-card-cloud-sync-v1";
-const APP_ASSET_VERSION = "20260309-7";
+const APP_ASSET_VERSION = "20260309-8";
 const BUNDLED_IMAGE_DECK_PATH = `./data/oh-image-deck.json?rev=${APP_ASSET_VERSION}`;
 const BUNDLED_WORD_DECK_PATH = `./data/oh-word-deck.json?rev=${APP_ASSET_VERSION}`;
 
@@ -2812,7 +2812,11 @@ function handlePreviewImageClick(event) {
   if (!image) {
     return;
   }
-  openImagePreview(image.dataset.previewSrc || image.currentSrc || image.src, image.dataset.previewTitle || image.alt || "");
+  openImagePreview(
+    image.dataset.previewSrc || image.currentSrc || image.src,
+    image.dataset.previewTitle || image.alt || "",
+    image.currentSrc || image.src || ""
+  );
 }
 
 function setPreviewMode(mode) {
@@ -2825,14 +2829,41 @@ function setPreviewMode(mode) {
   }
 }
 
-function openImagePreview(src, title) {
+function upgradePreviewImageSource(element, requestedUrl) {
+  if (!element || !requestedUrl) {
+    return;
+  }
+  const taskId = `${Date.now()}-${Math.random().toString(16).slice(2, 8)}`;
+  element.dataset.previewUpgradeTaskId = taskId;
+  preloadImageUrl(requestedUrl).then((resolvedUrl) => {
+    if (element.dataset.previewUpgradeTaskId !== taskId) {
+      return;
+    }
+    if (!resolvedUrl) {
+      return;
+    }
+    element.dataset.fullSrc = resolvedUrl;
+    element.dataset.previewSrc = resolvedUrl;
+    if (!element.currentSrc || element.currentSrc !== resolvedUrl) {
+      element.src = resolvedUrl;
+    }
+  });
+}
+
+function openImagePreview(src, title, displaySrc = "") {
   if (!src) {
     return;
   }
   setPreviewMode("single");
   refs.previewFitToggleBtn.classList.remove("is-active");
   refs.previewFitToggleBtn.textContent = "全图";
-  applySmartImageSource(refs.previewImage, src);
+  refs.previewImage.dataset.requestedSrc = src;
+  refs.previewImage.dataset.fullSrc = src;
+  refs.previewImage.dataset.previewSrc = src;
+  refs.previewImage.src = displaySrc || src;
+  refs.previewImage.classList.remove("smart-thumb-loading");
+  hideImageFailureUi(refs.previewImage);
+  upgradePreviewImageSource(refs.previewImage, src);
   refs.previewImage.alt = title || "卡牌放大预览";
   refs.previewTitle.textContent = title || "";
   refs.imagePreviewModal.hidden = false;
@@ -2841,7 +2872,7 @@ function openImagePreview(src, title) {
 
 function openPairPreview(imageSrc, wordSrc, title, quarter, sourceViewport = null, sourceDisplay = null) {
   if (!imageSrc || !wordSrc) {
-    openImagePreview(imageSrc || wordSrc, title);
+    openImagePreview(imageSrc || wordSrc, title, sourceDisplay?.displayImageSrc || sourceDisplay?.displayWordSrc || "");
     return;
   }
   setPreviewMode("pair");
@@ -2849,18 +2880,26 @@ function openPairPreview(imageSrc, wordSrc, title, quarter, sourceViewport = nul
   state.previewFitMode = "fit";
   const displayImageSrc = sourceDisplay?.displayImageSrc || "";
   const displayWordSrc = sourceDisplay?.displayWordSrc || "";
-  if (displayImageSrc) {
-    refs.previewPairImage.src = displayImageSrc;
-    refs.previewPairImage.classList.remove("smart-thumb-loading");
-    hideImageFailureUi(refs.previewPairImage);
-  }
-  if (displayWordSrc) {
-    refs.previewPairWord.src = displayWordSrc;
-    refs.previewPairWord.classList.remove("smart-thumb-loading");
-    hideImageFailureUi(refs.previewPairWord);
-  }
-  applySmartImageSource(refs.previewPairImage, imageSrc, { suppressFailureUi: Boolean(displayImageSrc) });
-  applySmartImageSource(refs.previewPairWord, wordSrc, { suppressFailureUi: Boolean(displayWordSrc) });
+  const initialImageSrc = displayImageSrc || imageSrc;
+  const initialWordSrc = displayWordSrc || wordSrc;
+
+  refs.previewPairImage.dataset.requestedSrc = imageSrc;
+  refs.previewPairImage.dataset.fullSrc = imageSrc;
+  refs.previewPairImage.dataset.previewSrc = imageSrc;
+  refs.previewPairImage.src = initialImageSrc;
+  refs.previewPairImage.classList.remove("smart-thumb-loading");
+  hideImageFailureUi(refs.previewPairImage);
+
+  refs.previewPairWord.dataset.requestedSrc = wordSrc;
+  refs.previewPairWord.dataset.fullSrc = wordSrc;
+  refs.previewPairWord.dataset.previewSrc = wordSrc;
+  refs.previewPairWord.src = initialWordSrc;
+  refs.previewPairWord.classList.remove("smart-thumb-loading");
+  hideImageFailureUi(refs.previewPairWord);
+
+  upgradePreviewImageSource(refs.previewPairImage, imageSrc);
+  upgradePreviewImageSource(refs.previewPairWord, wordSrc);
+
   updateCompositeSafeImageFit(refs.previewPairComposite, refs.previewPairImage);
   applyOverlayTuneToElement(refs.previewPairComposite);
   applyPreviewPairRotation(quarter);
@@ -2903,10 +2942,13 @@ function closeImagePreview() {
   updatePreviewFitToggle();
   refs.previewImage.src = "";
   refs.previewImage.classList.remove("smart-thumb-loading");
+  delete refs.previewImage.dataset.previewUpgradeTaskId;
   refs.previewPairImage.src = "";
   refs.previewPairImage.classList.remove("smart-thumb-loading");
+  delete refs.previewPairImage.dataset.previewUpgradeTaskId;
   refs.previewPairWord.src = "";
   refs.previewPairWord.classList.remove("smart-thumb-loading");
+  delete refs.previewPairWord.dataset.previewUpgradeTaskId;
   applyPreviewPairRotation(0);
   setCompositeGestureScale(refs.previewPairComposite, 1);
   setCompositePan(refs.previewPairComposite, 0, 0);
