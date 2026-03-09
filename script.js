@@ -261,7 +261,7 @@ const CURRENT_SESSION_STORAGE_KEY = "oh-card-current-session-v1";
 const SLOT_TEMPLATE_STORAGE_KEY = "oh-card-slot-template-v1";
 const UI_PREF_STORAGE_KEY = "oh-card-ui-pref-v1";
 const CLOUD_SYNC_STORAGE_KEY = "oh-card-cloud-sync-v1";
-const APP_ASSET_VERSION = "20260309-9";
+const APP_ASSET_VERSION = "20260309-10";
 const BUNDLED_IMAGE_DECK_PATH = `./data/oh-image-deck.json?rev=${APP_ASSET_VERSION}`;
 const BUNDLED_WORD_DECK_PATH = `./data/oh-word-deck.json?rev=${APP_ASSET_VERSION}`;
 
@@ -3798,7 +3798,40 @@ function ensureImageFailureUi(element) {
   return panel;
 }
 
+function shouldSuppressFailureUiByContext(element) {
+  const host = element?.parentElement;
+  if (!host) {
+    return false;
+  }
+  return (
+    host.classList.contains("pair-image-overlay") ||
+    host.classList.contains("pair-word-base") ||
+    host.classList.contains("preview-image-overlay") ||
+    host.classList.contains("preview-word-base")
+  );
+}
+
+function bindSmartImageLifecycle(element) {
+  if (!element || element.dataset.smartLifecycleBound === "1") {
+    return;
+  }
+  element.dataset.smartLifecycleBound = "1";
+  element.addEventListener("load", () => {
+    element.classList.remove("smart-thumb-loading");
+    hideImageFailureUi(element);
+    const current = element.currentSrc || element.src;
+    if (current) {
+      element.dataset.fullSrc = current;
+      element.dataset.previewSrc = current;
+    }
+  });
+}
+
 function showImageFailureUi(element, requestedUrl) {
+  if (shouldSuppressFailureUiByContext(element)) {
+    hideImageFailureUi(element);
+    return;
+  }
   const panel = ensureImageFailureUi(element);
   if (!panel) {
     return;
@@ -3825,6 +3858,7 @@ function applySmartImageSource(element, url, options = {}) {
   if (!element || !url) {
     return;
   }
+  bindSmartImageLifecycle(element);
   const suppressFailureUi = Boolean(options?.suppressFailureUi);
   hideImageFailureUi(element);
   element.dataset.requestedSrc = url;
