@@ -261,7 +261,7 @@ const CURRENT_SESSION_STORAGE_KEY = "oh-card-current-session-v1";
 const SLOT_TEMPLATE_STORAGE_KEY = "oh-card-slot-template-v1";
 const UI_PREF_STORAGE_KEY = "oh-card-ui-pref-v1";
 const CLOUD_SYNC_STORAGE_KEY = "oh-card-cloud-sync-v1";
-const APP_ASSET_VERSION = "20260309-11";
+const APP_ASSET_VERSION = "20260309-12";
 const BUNDLED_IMAGE_DECK_PATH = `./data/oh-image-deck.json?rev=${APP_ASSET_VERSION}`;
 const BUNDLED_WORD_DECK_PATH = `./data/oh-word-deck.json?rev=${APP_ASSET_VERSION}`;
 
@@ -2593,6 +2593,24 @@ function buildSceneImage(scene) {
   return `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`;
 }
 
+function buildImageFallbackData(labelText) {
+  const label = String(labelText || "卡牌").slice(0, 20);
+  const svg = `
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 960">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#f5efe4"/>
+      <stop offset="100%" stop-color="#ece4d7"/>
+    </linearGradient>
+  </defs>
+  <rect width="720" height="960" fill="url(#bg)"/>
+  <rect x="36" y="36" width="648" height="888" rx="24" fill="none" stroke="#d7c9b2" stroke-width="3" stroke-dasharray="8 6"/>
+  <text x="50%" y="48%" text-anchor="middle" font-size="42" fill="#7c6a57" font-family="serif">图片暂不可用</text>
+  <text x="50%" y="56%" text-anchor="middle" font-size="30" fill="#9c8873" font-family="serif">${escapeSVG(label)}</text>
+</svg>`;
+  return `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`;
+}
+
 function escapeSVG(value) {
   return String(value)
     .replaceAll("&", "&amp;")
@@ -3829,21 +3847,21 @@ function bindSmartImageLifecycle(element) {
 }
 
 function showImageFailureUi(element, requestedUrl) {
-  if (shouldSuppressFailureUiByContext(element)) {
+  const lastGoodSrc = element?.dataset?.lastGoodSrc || "";
+  if (lastGoodSrc) {
+    if ((element.currentSrc || element.src) !== lastGoodSrc) {
+      element.src = lastGoodSrc;
+    }
+    element.dataset.fullSrc = lastGoodSrc;
+    element.dataset.previewSrc = lastGoodSrc;
     hideImageFailureUi(element);
     return;
   }
-  const panel = ensureImageFailureUi(element);
-  if (!panel) {
-    return;
-  }
-  panel.__targetElement = element;
-  const code = panel.querySelector(".image-fail-code");
-  if (code) {
-    code.textContent = `卡牌：${deriveImageCardLabel(requestedUrl)}`;
-  }
-  panel.hidden = false;
-  element.classList.add("image-load-failed");
+  const fallback = buildImageFallbackData(deriveImageCardLabel(requestedUrl));
+  element.src = fallback;
+  element.dataset.fullSrc = fallback;
+  element.dataset.previewSrc = fallback;
+  hideImageFailureUi(element);
 }
 
 function hideImageFailureUi(element) {
