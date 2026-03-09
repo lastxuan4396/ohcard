@@ -27,6 +27,8 @@
         <div class="row" style="margin-top:10px;">
           <button class="primary" id="runBtn">运行检测</button>
           <button id="repairBtn">清理缓存并重测</button>
+          <button id="inspectDeckBtn">检查当前卡组配置</button>
+          <button id="resetDeckBtn">重置为内置卡组</button>
           <button id="copyBtn">复制结果</button>
           <a href="./?rev=20260309-7" target="_blank" rel="noopener">返回主站</a>
         </div>
@@ -46,6 +48,8 @@
         './data/oh-image-deck.json?rev=20260309-7',
         './data/oh-word-deck.json?rev=20260309-7'
       ];
+      const CUSTOM_DECK_STORAGE_KEY = 'oh-card-custom-decks-v1';
+      const CURRENT_SESSION_STORAGE_KEY = 'oh-card-current-session-v1';
 
       function line(text = '') {
         logEl.textContent += text + '\n';
@@ -121,6 +125,47 @@
         line('请把这一整页截图发给我。');
       }
 
+      function inspectDeckConfig() {
+        line('--- localStorage deck inspect ---');
+        try {
+          const raw = localStorage.getItem(CUSTOM_DECK_STORAGE_KEY);
+          if (!raw) {
+            line('custom deck: (none)');
+          } else {
+            const parsed = JSON.parse(raw);
+            const imageDeck = Array.isArray(parsed?.imageDeck) ? parsed.imageDeck : [];
+            const wordDeck = Array.isArray(parsed?.wordDeck) ? parsed.wordDeck : [];
+            line(`custom image deck count: ${imageDeck.length}`);
+            line(`custom word deck count: ${wordDeck.length}`);
+            const imageSamples = imageDeck.slice(0, 6).map((item) => item?.image).filter(Boolean);
+            const wordSamples = wordDeck.slice(0, 6).map((item) => item?.image).filter(Boolean);
+            line(`custom image samples: ${imageSamples.length ? imageSamples.join(' | ') : '(none)'}`);
+            line(`custom word samples: ${wordSamples.length ? wordSamples.join(' | ') : '(none)'}`);
+          }
+        } catch (e) {
+          line('custom deck parse error: ' + (e.message || e));
+        }
+        try {
+          const sessionRaw = localStorage.getItem(CURRENT_SESSION_STORAGE_KEY);
+          if (sessionRaw) {
+            const session = JSON.parse(sessionRaw);
+            const cards = Array.isArray(session?.cards) ? session.cards : [];
+            line(`current session cards: ${cards.length}`);
+            const samples = cards.slice(0, 4).map((c) => {
+              if (c?.kind === 'pair') {
+                return `[pair] image=${c?.imageCard?.image || ''} | word=${c?.wordCard?.image || ''}`;
+              }
+              return `[${c?.kind || 'word'}] ${c?.image || c?.name || ''}`;
+            });
+            line(`current session samples: ${samples.length ? samples.join(' || ') : '(none)'}`);
+          } else {
+            line('current session: (none)');
+          }
+        } catch (e) {
+          line('current session parse error: ' + (e.message || e));
+        }
+      }
+
       async function repair() {
         line('开始清理缓存...');
         try {
@@ -141,8 +186,22 @@
         }
       }
 
+      function resetDeckConfig() {
+        try {
+          localStorage.removeItem(CUSTOM_DECK_STORAGE_KEY);
+          localStorage.removeItem(CURRENT_SESSION_STORAGE_KEY);
+          line('已清除自定义卡组与当前会话，主站将回到内置卡组。');
+        } catch (e) {
+          line('清除失败: ' + (e.message || e));
+        }
+      }
+
       document.getElementById('runBtn').addEventListener('click', run);
       document.getElementById('repairBtn').addEventListener('click', repair);
+      document.getElementById('inspectDeckBtn').addEventListener('click', inspectDeckConfig);
+      document.getElementById('resetDeckBtn').addEventListener('click', () => {
+        resetDeckConfig();
+      });
       document.getElementById('copyBtn').addEventListener('click', async () => {
         try {
           await navigator.clipboard.writeText(logEl.textContent || '');
