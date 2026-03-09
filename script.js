@@ -261,9 +261,9 @@ const CURRENT_SESSION_STORAGE_KEY = "oh-card-current-session-v1";
 const SLOT_TEMPLATE_STORAGE_KEY = "oh-card-slot-template-v1";
 const UI_PREF_STORAGE_KEY = "oh-card-ui-pref-v1";
 const CLOUD_SYNC_STORAGE_KEY = "oh-card-cloud-sync-v1";
-const APP_ASSET_VERSION = "20260309-5";
-const BUNDLED_IMAGE_DECK_PATH = `./data/oh-image-deck.json?v=${APP_ASSET_VERSION}`;
-const BUNDLED_WORD_DECK_PATH = `./data/oh-word-deck.json?v=${APP_ASSET_VERSION}`;
+const APP_ASSET_VERSION = "20260309-6";
+const BUNDLED_IMAGE_DECK_PATH = `./data/oh-image-deck.json?rev=${APP_ASSET_VERSION}`;
+const BUNDLED_WORD_DECK_PATH = `./data/oh-word-deck.json?rev=${APP_ASSET_VERSION}`;
 
 const DEFAULT_OVERLAY_TUNE = {
   left: 11.8,
@@ -3532,7 +3532,7 @@ function withCacheBust(url) {
   if (!isLocalCardsAsset(url)) {
     return url;
   }
-  const marker = `v=${APP_ASSET_VERSION}`;
+  const marker = `rev=${APP_ASSET_VERSION}`;
   if (url.includes(marker)) {
     return url;
   }
@@ -4875,7 +4875,7 @@ function registerServiceWorker() {
   }
   window.addEventListener("load", () => {
     navigator.serviceWorker
-      .register(`./sw.js?v=${APP_ASSET_VERSION}`)
+      .register(`./sw.js?rev=${APP_ASSET_VERSION}`)
       .then((registration) => {
         if (registration.waiting) {
           registration.waiting.postMessage({ type: "SKIP_WAITING" });
