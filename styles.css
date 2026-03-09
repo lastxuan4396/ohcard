@@ -1286,7 +1286,7 @@ select:focus {
 
 .bottom-grid {
   display: grid;
-  grid-template-columns: 1.2fr 1fr;
+  grid-template-columns: 1.2fr 1fr 1fr;
   gap: 16px;
 }
 
@@ -1429,6 +1429,169 @@ select:focus {
   margin-right: 6px;
 }
 
+.shortcut-card,
+.slot-editor,
+.cloud-sync {
+  margin-top: 12px;
+  padding: 10px;
+  border-radius: 12px;
+  border: 1px solid rgba(128, 98, 66, 0.18);
+  background: rgba(255, 255, 255, 0.62);
+}
+
+.slot-editor-list {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.slot-editor-row {
+  display: grid;
+  grid-template-columns: 30px 1fr auto auto;
+  align-items: center;
+  gap: 6px;
+}
+
+.slot-editor-row input {
+  width: 100%;
+}
+
+.slot-editor-index {
+  width: 24px;
+  height: 24px;
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  background: rgba(46, 111, 103, 0.16);
+  color: #1f544d;
+  font-size: 12px;
+}
+
+.readonly-banner {
+  margin-bottom: 10px;
+  border: 1px solid rgba(46, 111, 103, 0.42);
+  border-radius: 12px;
+  padding: 9px 10px;
+  font-size: 13px;
+  color: #2b5d56;
+  background: rgba(228, 247, 242, 0.92);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.dual-mode-panel {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.dual-note textarea {
+  min-height: 78px;
+}
+
+.analytics-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.analytics-item {
+  border: 1px solid rgba(128, 98, 66, 0.2);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.72);
+  padding: 10px;
+}
+
+.analytics-item h3 {
+  font-size: 15px;
+}
+
+.analytics-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.analytics-tags span {
+  display: inline-block;
+  border-radius: 999px;
+  padding: 3px 8px;
+  font-size: 12px;
+  color: #2a6059;
+  background: rgba(46, 111, 103, 0.14);
+}
+
+.analytics-number {
+  margin: 6px 0 0;
+  font-size: 30px;
+  font-weight: 700;
+  color: #8e4a1b;
+}
+
+.image-host {
+  position: relative;
+}
+
+.image-fail-ui {
+  position: absolute;
+  inset: 0;
+  z-index: 7;
+  display: grid;
+  place-content: center;
+  gap: 6px;
+  padding: 10px;
+  text-align: center;
+  background: rgba(249, 241, 231, 0.94);
+  border: 1px dashed rgba(137, 104, 71, 0.36);
+}
+
+.image-fail-title,
+.image-fail-code {
+  margin: 0;
+  font-size: 12px;
+  color: #6f5840;
+}
+
+.image-load-failed {
+  opacity: 0.08;
+}
+
+.pair-rotate-btn {
+  touch-action: manipulation;
+}
+
+body.focus-mode .app-header,
+body.focus-mode .workflow-panel,
+body.focus-mode .control-panel,
+body.focus-mode .playbook-panel,
+body.focus-mode .history-panel,
+body.focus-mode .analytics-panel {
+  display: none;
+}
+
+body.focus-mode .main-grid {
+  grid-template-columns: 1.6fr 1fr;
+}
+
+body.focus-mode .draw-panel {
+  min-height: calc(100vh - 260px);
+}
+
+body.focus-mode .guide-panel {
+  max-height: none;
+}
+
+body.readonly-mode .control-panel .btn,
+body.readonly-mode .note-panel .btn,
+body.readonly-mode .control-panel input,
+body.readonly-mode .control-panel textarea,
+body.readonly-mode .note-panel textarea {
+  opacity: 0.7;
+}
+
 body.immersive-mode .app-header,
 body.immersive-mode .workflow-panel,
 body.immersive-mode .control-panel,
@@ -1452,6 +1615,10 @@ body.immersive-mode .deck-zone {
 
 @media (max-width: 1150px) {
   .main-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .bottom-grid {
     grid-template-columns: 1fr 1fr;
   }
 
@@ -1538,6 +1705,11 @@ body.immersive-mode .deck-zone {
     grid-template-columns: 1fr;
   }
 
+  .dual-mode-panel,
+  .analytics-grid {
+    grid-template-columns: 1fr;
+  }
+
   .history-tools {
     grid-template-columns: 1fr;
   }
@@ -1568,8 +1740,8 @@ body.immersive-mode .deck-zone {
   }
 
   .pair-rotate-btn {
-    width: 44px;
-    height: 44px;
+    width: 48px;
+    height: 48px;
     font-size: 24px;
   }
 
@@ -1590,12 +1762,12 @@ body.immersive-mode .deck-zone {
 
   .draw-head-right {
     flex-direction: column;
-    align-items: flex-end;
+    align-items: stretch;
     gap: 6px;
   }
 
   .draw-head-right p {
-    text-align: right;
+    text-align: left;
   }
 
   .preview-pair-viewport {
@@ -1605,6 +1777,10 @@ body.immersive-mode .deck-zone {
 
   .preview-pair-composite {
     width: min(100%, 420px);
+  }
+
+  body.focus-mode .main-grid {
+    grid-template-columns: 1fr;
   }
 
   body.immersive-mode .draw-panel {
@@ -1639,8 +1815,8 @@ body.immersive-mode .deck-zone {
   }
 
   .pair-rotate-controls {
-    right: 8px;
-    gap: 8px;
+    right: 4px;
+    gap: 6px;
   }
 
   .pair-rotate-btn {

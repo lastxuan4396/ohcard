@@ -3,7 +3,10 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#c17b3f" />
     <title>OH Card Studio</title>
+    <link rel="manifest" href="./manifest.webmanifest" />
+    <link rel="icon" type="image/svg+xml" href="./favicon.svg" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
@@ -136,6 +139,35 @@
             <p id="modeGoal"></p>
             <ol id="modeSteps"></ol>
           </div>
+
+          <div class="shortcut-card">
+            <h3>快捷键</h3>
+            <p class="deck-note">空格 抽卡 · R 旋转 · F 全屏 · C 复制引导 · Esc 退出专注/预览</p>
+          </div>
+
+          <div class="slot-editor">
+            <h3>8. 牌阵编辑器</h3>
+            <p class="deck-note">可修改当前玩法位置名称、上下排序并保存模板。</p>
+            <div id="slotEditorList" class="slot-editor-list"></div>
+            <div class="actions compact">
+              <button id="saveSlotTemplateBtn" class="btn btn-ghost">保存为当前玩法模板</button>
+              <button id="resetSlotTemplateBtn" class="btn btn-danger">恢复默认位置名</button>
+            </div>
+          </div>
+
+          <div class="cloud-sync">
+            <h3>9. 云同步</h3>
+            <p class="deck-note">可选：填写云端 API 地址后一键推送/拉取；也支持同步码跨设备。</p>
+            <input id="cloudEndpointInput" type="text" placeholder="Cloud API URL（可留空）" />
+            <input id="cloudTokenInput" type="text" placeholder="Cloud Token（可留空）" />
+            <div class="actions compact">
+              <button id="cloudPushBtn" class="btn btn-ghost">推送到云端</button>
+              <button id="cloudPullBtn" class="btn btn-ghost">从云端拉取</button>
+              <button id="syncCodeExportBtn" class="btn btn-ghost">生成同步码</button>
+              <button id="syncCodeImportBtn" class="btn btn-ghost">导入同步码</button>
+            </div>
+            <p id="cloudSyncStatus" class="deck-note">未连接云端。</p>
+          </div>
         </section>
 
         <section class="panel draw-panel">
@@ -144,7 +176,15 @@
             <div class="draw-head-right">
               <p id="spreadSummary"></p>
               <button id="immersiveBtn" class="btn btn-ghost">沉浸模式</button>
+              <button id="focusModeBtn" class="btn btn-ghost">专注视图</button>
+              <button id="fullscreenBtn" class="btn btn-ghost">全屏</button>
+              <button id="shareReadonlyBtn" class="btn btn-primary">分享只读链接</button>
             </div>
+          </div>
+
+          <div id="readonlyBanner" class="readonly-banner" hidden>
+            当前是只读分享模式。你可以查看牌面与引导，但不会覆盖本地数据。
+            <button id="exitReadonlyBtn" class="btn btn-ghost btn-small">退出只读</button>
           </div>
 
           <div class="deck-zone">
@@ -181,6 +221,19 @@
       <section class="bottom-grid">
         <section class="panel note-panel">
           <h2>6. 记录与行动</h2>
+          <div class="actions compact">
+            <button id="toggleDualModeBtn" class="btn btn-ghost">开启双人模式</button>
+          </div>
+          <div id="dualModePanel" class="dual-mode-panel" hidden>
+            <div class="dual-note">
+              <label class="label" for="dualNoteA">A 方视角记录</label>
+              <textarea id="dualNoteA" placeholder="A 方看到什么、感受什么、准备做什么"></textarea>
+            </div>
+            <div class="dual-note">
+              <label class="label" for="dualNoteB">B 方视角记录</label>
+              <textarea id="dualNoteB" placeholder="B 方看到什么、感受什么、准备做什么"></textarea>
+            </div>
+          </div>
           <label class="label" for="noteInput">你的洞察、决定、下一步行动</label>
           <textarea
             id="noteInput"
@@ -193,6 +246,8 @@
             <button id="exportPdfBtn" class="btn btn-ghost">导出复盘 PDF</button>
             <button id="exportA4Btn" class="btn btn-ghost">导出可打印 A4</button>
             <button id="exportPosterBtn" class="btn btn-ghost">导出卡面海报</button>
+            <button id="exportConsultBtn" class="btn btn-ghost">导出咨询报告版</button>
+            <button id="exportHomeworkBtn" class="btn btn-ghost">导出作业版</button>
           </div>
           <div class="replay-assistant">
             <div class="replay-assistant-head">
@@ -221,6 +276,25 @@
             </select>
           </div>
           <div id="historyList" class="history-list"></div>
+        </section>
+
+        <section class="panel analytics-panel">
+          <h2>7. 洞察统计</h2>
+          <p id="analyticsSummary" class="deck-note">抽卡后会自动统计高频词、情绪趋势与行动完成率。</p>
+          <div class="analytics-grid">
+            <article class="analytics-item">
+              <h3>高频关键词</h3>
+              <div id="analyticsTopWords" class="analytics-tags"></div>
+            </article>
+            <article class="analytics-item">
+              <h3>情绪趋势</h3>
+              <div id="analyticsEmotionTrend" class="analytics-tags"></div>
+            </article>
+            <article class="analytics-item">
+              <h3>行动完成率</h3>
+              <p id="analyticsActionRate" class="analytics-number">0%</p>
+            </article>
+          </div>
         </section>
       </section>
     </div>
