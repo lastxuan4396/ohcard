@@ -1,4 +1,4 @@
-const CACHE_NAME = "oh-card-studio-v4";
+const CACHE_NAME = "oh-card-studio-v5";
 const APP_SHELL = "./index.html";
 const CORE_ASSETS = [
   "./",
