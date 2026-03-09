@@ -3560,7 +3560,7 @@ function getImageUrlCandidates(url) {
   return Array.from(new Set([...candidates, ...busted]));
 }
 
-function tryLoadImageCandidate(url) {
+function loadImageElement(url) {
   return new Promise((resolve) => {
     const image = new Image();
     image.decoding = "async";
@@ -3569,6 +3569,40 @@ function tryLoadImageCandidate(url) {
     image.onerror = () => resolve(null);
     image.src = url;
   });
+}
+
+async function tryLoadImageViaFetch(url) {
+  try {
+    const response = await fetch(url, { cache: "no-store" });
+    if (!response.ok) {
+      return null;
+    }
+    const contentType = response.headers.get("content-type") || "";
+    if (!contentType.startsWith("image/")) {
+      return null;
+    }
+    const blob = await response.blob();
+    if (!blob || blob.size <= 0) {
+      return null;
+    }
+    const objectUrl = URL.createObjectURL(blob);
+    const loaded = await loadImageElement(objectUrl);
+    if (!loaded) {
+      URL.revokeObjectURL(objectUrl);
+      return null;
+    }
+    return loaded;
+  } catch (error) {
+    return null;
+  }
+}
+
+async function tryLoadImageCandidate(url) {
+  const direct = await loadImageElement(url);
+  if (direct) {
+    return direct;
+  }
+  return await tryLoadImageViaFetch(url);
 }
 
 function cacheResolvedImage(originalUrl, resolvedUrl, image) {
@@ -3591,7 +3625,7 @@ function resolveImageUrl(url) {
   if (!url) {
     return Promise.resolve(null);
   }
-  if (state.resolvedImageUrlCache.has(url)) {
+  if (state.resolvedImageUrlCache.has(url) && state.resolvedImageUrlCache.get(url)) {
     return Promise.resolve(state.resolvedImageUrlCache.get(url));
   }
   if (state.resolvingImageUrlTasks.has(url)) {
@@ -3607,7 +3641,6 @@ function resolveImageUrl(url) {
       cacheResolvedImage(url, loaded.url, loaded.image);
       return loaded.url;
     }
-    state.resolvedImageUrlCache.set(url, null);
     return null;
   })();
   state.resolvingImageUrlTasks.set(url, task);
@@ -3624,7 +3657,12 @@ function preloadImageUrl(url) {
   if (state.preloadedImageTasks.has(url)) {
     return state.preloadedImageTasks.get(url);
   }
-  const task = resolveImageUrl(url);
+  const task = resolveImageUrl(url).then((resolved) => {
+    if (!resolved) {
+      state.preloadedImageTasks.delete(url);
+    }
+    return resolved;
+  });
   state.preloadedImageTasks.set(url, task);
   return task;
 }
@@ -3748,10 +3786,21 @@ function applySmartImageSource(element, url) {
       return;
     }
     if (!resolvedUrl) {
+      if (element.dataset.retryingImageOnce !== "1") {
+        element.dataset.retryingImageOnce = "1";
+        setTimeout(() => {
+          if (element.dataset.requestedSrc === url) {
+            applySmartImageSource(element, url);
+          }
+        }, 360);
+        return;
+      }
+      delete element.dataset.retryingImageOnce;
       element.classList.remove("smart-thumb-loading");
       showImageFailureUi(element, url);
       return;
     }
+    delete element.dataset.retryingImageOnce;
     element.dataset.fullSrc = resolvedUrl;
     element.dataset.previewSrc = resolvedUrl;
     if (element.src !== resolvedUrl) {
