@@ -1,4 +1,5 @@
-const CACHE_NAME = "oh-card-studio-v1";
+const CACHE_NAME = "oh-card-studio-v2";
+const APP_SHELL = "./index.html";
 const CORE_ASSETS = [
   "./",
   "./index.html",
@@ -13,41 +14,85 @@ const CORE_ASSETS = [
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => cache.addAll(CORE_ASSETS)).then(() => self.skipWaiting())
+    caches
+      .open(CACHE_NAME)
+      .then((cache) => cache.addAll(CORE_ASSETS))
+      .then(() => self.skipWaiting())
+      .catch(() => self.skipWaiting())
   );
 });
 
 self.addEventListener("activate", (event) => {
   event.waitUntil(
-    caches.keys().then((keys) =>
-      Promise.all(
-        keys.map((key) => {
-          if (key !== CACHE_NAME) {
-            return caches.delete(key);
-          }
-          return null;
-        })
-      )
-    ).then(() => self.clients.claim())
+    caches
+      .keys()
+      .then((keys) => Promise.all(keys.map((key) => (key === CACHE_NAME ? null : caches.delete(key)))))
+      .then(() => self.clients.claim())
   );
 });
+
+self.addEventListener("message", (event) => {
+  if (event.data && event.data.type === "SKIP_WAITING") {
+    self.skipWaiting();
+  }
+});
+
+function isCacheableResponse(request, response) {
+  if (!response || !response.ok) {
+    return false;
+  }
+  try {
+    const requestUrl = new URL(request.url);
+    return requestUrl.origin === self.location.origin;
+  } catch (error) {
+    return false;
+  }
+}
+
+async function networkFirst(request, allowShellFallback) {
+  try {
+    const response = await fetch(request);
+    if (isCacheableResponse(request, response)) {
+      const cache = await caches.open(CACHE_NAME);
+      cache.put(request, response.clone());
+    } else if (!response.ok) {
+      const cached = await caches.match(request);
+      if (cached) {
+        return cached;
+      }
+    }
+    return response;
+  } catch (error) {
+    const cached = await caches.match(request);
+    if (cached) {
+      return cached;
+    }
+    if (allowShellFallback) {
+      const shell = await caches.match(APP_SHELL);
+      if (shell) {
+        return shell;
+      }
+    }
+    throw error;
+  }
+}
 
 self.addEventListener("fetch", (event) => {
   if (event.request.method !== "GET") {
     return;
   }
-  event.respondWith(
-    caches.match(event.request).then((cached) => {
-      if (cached) {
-        return cached;
-      }
-      return fetch(event.request)
-        .then((response) => {
-          const cloned = response.clone();
-          caches.open(CACHE_NAME).then((cache) => cache.put(event.request, cloned));
-          return response;
-        })
-        .catch(() => caches.match("./index.html"));
-    })
-  );
+
+  let requestUrl;
+  try {
+    requestUrl = new URL(event.request.url);
+  } catch (error) {
+    return;
+  }
+
+  if (requestUrl.origin !== self.location.origin) {
+    return;
+  }
+
+  const isNavigation = event.request.mode === "navigate" || event.request.destination === "document";
+  event.respondWith(networkFirst(event.request, isNavigation));
 });

@@ -261,8 +261,9 @@ const CURRENT_SESSION_STORAGE_KEY = "oh-card-current-session-v1";
 const SLOT_TEMPLATE_STORAGE_KEY = "oh-card-slot-template-v1";
 const UI_PREF_STORAGE_KEY = "oh-card-ui-pref-v1";
 const CLOUD_SYNC_STORAGE_KEY = "oh-card-cloud-sync-v1";
-const BUNDLED_IMAGE_DECK_PATH = "./data/oh-image-deck.json";
-const BUNDLED_WORD_DECK_PATH = "./data/oh-word-deck.json";
+const APP_ASSET_VERSION = "20260309-4";
+const BUNDLED_IMAGE_DECK_PATH = `./data/oh-image-deck.json?v=${APP_ASSET_VERSION}`;
+const BUNDLED_WORD_DECK_PATH = `./data/oh-word-deck.json?v=${APP_ASSET_VERSION}`;
 
 const DEFAULT_OVERLAY_TUNE = {
   left: 11.8,
@@ -3508,6 +3509,36 @@ function normalizeOverlayValue(value, fallback) {
   return Math.max(6, Math.min(24, Math.round(numeric * 10) / 10));
 }
 
+function isLocalCardsAsset(url) {
+  if (typeof url !== "string") {
+    return false;
+  }
+  const source = url.trim();
+  if (!source || source.startsWith("data:")) {
+    return false;
+  }
+  if (/^(?:\.?\/)?cards\//i.test(source)) {
+    return true;
+  }
+  try {
+    const parsed = new URL(source, window.location.href);
+    return parsed.origin === window.location.origin && parsed.pathname.startsWith("/cards/");
+  } catch (error) {
+    return false;
+  }
+}
+
+function withCacheBust(url) {
+  if (!isLocalCardsAsset(url)) {
+    return url;
+  }
+  const marker = `v=${APP_ASSET_VERSION}`;
+  if (url.includes(marker)) {
+    return url;
+  }
+  return `${url}${url.includes("?") ? "&" : "?"}${marker}`;
+}
+
 function getImageUrlCandidates(url) {
   if (typeof url !== "string" || !url.trim()) {
     return [];
@@ -3525,7 +3556,8 @@ function getImageUrlCandidates(url) {
   } else {
     candidates.push(`${base}.webp${query}`);
   }
-  return Array.from(new Set(candidates));
+  const busted = candidates.map((candidate) => withCacheBust(candidate));
+  return Array.from(new Set([...candidates, ...busted]));
 }
 
 function tryLoadImageCandidate(url) {
@@ -4793,7 +4825,34 @@ function registerServiceWorker() {
     return;
   }
   window.addEventListener("load", () => {
-    navigator.serviceWorker.register("./sw.js").catch(() => {});
+    navigator.serviceWorker
+      .register(`./sw.js?v=${APP_ASSET_VERSION}`)
+      .then((registration) => {
+        if (registration.waiting) {
+          registration.waiting.postMessage({ type: "SKIP_WAITING" });
+        }
+        registration.addEventListener("updatefound", () => {
+          const nextWorker = registration.installing;
+          if (!nextWorker) {
+            return;
+          }
+          nextWorker.addEventListener("statechange", () => {
+            if (nextWorker.state === "installed" && navigator.serviceWorker.controller) {
+              nextWorker.postMessage({ type: "SKIP_WAITING" });
+            }
+          });
+        });
+        registration.update().catch(() => {});
+      })
+      .catch(() => {});
+
+    navigator.serviceWorker.addEventListener("controllerchange", () => {
+      if (window.__ohSwReloading) {
+        return;
+      }
+      window.__ohSwReloading = true;
+      window.location.reload();
+    });
   });
 }
 
