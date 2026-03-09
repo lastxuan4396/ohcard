@@ -261,7 +261,7 @@ const CURRENT_SESSION_STORAGE_KEY = "oh-card-current-session-v1";
 const SLOT_TEMPLATE_STORAGE_KEY = "oh-card-slot-template-v1";
 const UI_PREF_STORAGE_KEY = "oh-card-ui-pref-v1";
 const CLOUD_SYNC_STORAGE_KEY = "oh-card-cloud-sync-v1";
-const APP_ASSET_VERSION = "20260309-8";
+const APP_ASSET_VERSION = "20260309-9";
 const BUNDLED_IMAGE_DECK_PATH = `./data/oh-image-deck.json?rev=${APP_ASSET_VERSION}`;
 const BUNDLED_WORD_DECK_PATH = `./data/oh-word-deck.json?rev=${APP_ASSET_VERSION}`;
 
@@ -1291,7 +1291,7 @@ function fillCardFront(front, card, slotLabel) {
       const wordImage = document.createElement("img");
       wordImage.alt = card.wordCard.name;
       wordImage.loading = "lazy";
-      applySmartImageSource(wordImage, card.wordCard.image);
+      applySmartImageSource(wordImage, card.wordCard.image, { suppressFailureUi: true });
       wordBase.appendChild(wordImage);
     } else {
       const fallback = document.createElement("div");
@@ -1305,7 +1305,7 @@ function fillCardFront(front, card, slotLabel) {
     const image = document.createElement("img");
     image.alt = card.imageCard.name;
     image.loading = "lazy";
-    applySmartImageSource(image, card.imageCard.image);
+    applySmartImageSource(image, card.imageCard.image, { suppressFailureUi: true });
     imageOverlay.appendChild(image);
 
     pairComposite.append(wordBase, imageOverlay);
@@ -3862,6 +3862,10 @@ function applySmartImageSource(element, url, options = {}) {
       delete element.dataset.retryingImageOnce;
       element.classList.remove("smart-thumb-loading");
       if (suppressFailureUi && (element.currentSrc || element.src)) {
+        hideImageFailureUi(element);
+        return;
+      }
+      if (element.complete && Number(element.naturalWidth || 0) > 0) {
         hideImageFailureUi(element);
         return;
       }
