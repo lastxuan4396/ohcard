@@ -368,6 +368,8 @@ const state = {
   previewFitMode: "fit",
   preloadedImageUrls: new Set(),
   preloadedImageTasks: new Map(),
+  resolvedImageUrlCache: new Map(),
+  resolvingImageUrlTasks: new Map(),
   thumbnailCache: new Map(),
   bundledWebpAvailable: false,
   viewportFitTick: 0,
@@ -2031,11 +2033,6 @@ async function autoLoadBundledDecks() {
     const [imageRaw, wordRaw] = await Promise.all([imageRes.json(), wordRes.json()]);
     let imageDeck = Array.isArray(imageRaw) ? imageRaw.map((entry) => normalizeImageCard(entry)).filter(Boolean) : [];
     let wordDeck = Array.isArray(wordRaw) ? wordRaw.map((entry) => normalizeWordCard(entry)).filter(Boolean) : [];
-    const webpReady = await probeBundledWebp(imageDeck, wordDeck);
-    if (webpReady) {
-      imageDeck = applyWebpDeck(imageDeck);
-      wordDeck = applyWebpDeck(wordDeck);
-    }
 
     let changed = false;
 
@@ -2062,10 +2059,7 @@ async function autoLoadBundledDecks() {
     renderDeckStatus();
     renderDeckValidation();
     warmupPreload();
-    setSummary(
-      `已自动加载实卡素材：图卡 ${state.imageDeck.length} 张 / 字卡 ${state.wordDeck.length} 张。${state.bundledWebpAvailable ? " WebP 已启用。" : ""}`,
-      false
-    );
+    setSummary(`已自动加载实卡素材：图卡 ${state.imageDeck.length} 张 / 字卡 ${state.wordDeck.length} 张。`, false);
   } catch (error) {
     console.warn("autoLoadBundledDecks failed", error);
   }
@@ -2339,7 +2333,9 @@ function applyPairRotation(viewport, quarter) {
   viewport.classList.add(ROTATION_CLASSES[normalized]);
   refreshPairViewportFit(viewport);
   const composite = viewport.querySelector(".pair-composite");
-  clampCompositePan(viewport, composite, true);
+  if (composite) {
+    clampCompositePan(viewport, composite, true);
+  }
 }
 
 function rotatePairViewport(viewport, deltaQuarter) {
@@ -2383,8 +2379,18 @@ function handlePreviewImageClick(event) {
 
   const pairInteractive = event.target.closest(".pair-interactive");
   if (pairInteractive) {
-    const imageSrc = pairInteractive.dataset.previewImageSrc || "";
-    const wordSrc = pairInteractive.dataset.previewWordSrc || "";
+    const imageElement = pairInteractive.querySelector(".pair-image-overlay img");
+    const wordElement = pairInteractive.querySelector(".pair-word-base img");
+    const imageSrc =
+      imageElement?.dataset.fullSrc ||
+      imageElement?.currentSrc ||
+      pairInteractive.dataset.previewImageSrc ||
+      "";
+    const wordSrc =
+      wordElement?.dataset.fullSrc ||
+      wordElement?.currentSrc ||
+      pairInteractive.dataset.previewWordSrc ||
+      "";
     const title = pairInteractive.dataset.previewTitle || "";
     const viewport = pairInteractive.querySelector(".pair-viewport");
     const quarter = normalizeQuarter(Number(viewport?.dataset.rotationQuarter || 0));
@@ -2527,6 +2533,9 @@ function getCompositePan(element) {
 }
 
 function clampCompositePan(viewport, composite, animate) {
+  if (!viewport || !composite) {
+    return;
+  }
   const { x, y } = getCompositePan(composite);
   const bounds = computePanBounds(viewport, composite);
   const nx = Math.max(-bounds.maxX, Math.min(bounds.maxX, x));
@@ -3029,6 +3038,83 @@ function normalizeOverlayValue(value, fallback) {
   return Math.max(6, Math.min(24, Math.round(numeric * 10) / 10));
 }
 
+function getImageUrlCandidates(url) {
+  if (typeof url !== "string" || !url.trim()) {
+    return [];
+  }
+  const source = url.trim();
+  const match = source.match(/^(.*)\.(webp|jpe?g|png)(\?.*)?$/i);
+  if (!match) {
+    return [source];
+  }
+  const [, base, extRaw, query = ""] = match;
+  const ext = extRaw.toLowerCase();
+  const candidates = [source];
+  if (ext === "webp") {
+    candidates.push(`${base}.jpg${query}`, `${base}.jpeg${query}`, `${base}.png${query}`);
+  } else {
+    candidates.push(`${base}.webp${query}`);
+  }
+  return Array.from(new Set(candidates));
+}
+
+function tryLoadImageCandidate(url) {
+  return new Promise((resolve) => {
+    const image = new Image();
+    image.decoding = "async";
+    image.loading = "eager";
+    image.onload = () => resolve({ url, image });
+    image.onerror = () => resolve(null);
+    image.src = url;
+  });
+}
+
+function cacheResolvedImage(originalUrl, resolvedUrl, image) {
+  if (!originalUrl || !resolvedUrl || !image) {
+    return;
+  }
+  state.preloadedImageUrls.add(originalUrl);
+  state.preloadedImageUrls.add(resolvedUrl);
+  state.resolvedImageUrlCache.set(originalUrl, resolvedUrl);
+  if (!state.thumbnailCache.has(originalUrl) || !state.thumbnailCache.has(resolvedUrl)) {
+    const thumb = createThumbnailData(image);
+    if (thumb) {
+      state.thumbnailCache.set(originalUrl, thumb);
+      state.thumbnailCache.set(resolvedUrl, thumb);
+    }
+  }
+}
+
+function resolveImageUrl(url) {
+  if (!url) {
+    return Promise.resolve(null);
+  }
+  if (state.resolvedImageUrlCache.has(url)) {
+    return Promise.resolve(state.resolvedImageUrlCache.get(url));
+  }
+  if (state.resolvingImageUrlTasks.has(url)) {
+    return state.resolvingImageUrlTasks.get(url);
+  }
+  const task = (async () => {
+    const candidates = getImageUrlCandidates(url);
+    for (const candidate of candidates) {
+      const loaded = await tryLoadImageCandidate(candidate);
+      if (!loaded) {
+        continue;
+      }
+      cacheResolvedImage(url, loaded.url, loaded.image);
+      return loaded.url;
+    }
+    state.resolvedImageUrlCache.set(url, null);
+    return null;
+  })();
+  state.resolvingImageUrlTasks.set(url, task);
+  task.finally(() => {
+    state.resolvingImageUrlTasks.delete(url);
+  });
+  return task;
+}
+
 function preloadImageUrl(url) {
   if (!url) {
     return Promise.resolve(null);
@@ -3036,23 +3122,7 @@ function preloadImageUrl(url) {
   if (state.preloadedImageTasks.has(url)) {
     return state.preloadedImageTasks.get(url);
   }
-  const task = new Promise((resolve) => {
-    const image = new Image();
-    image.decoding = "async";
-    image.loading = "eager";
-    image.onload = () => {
-      state.preloadedImageUrls.add(url);
-      if (!state.thumbnailCache.has(url)) {
-        const thumb = createThumbnailData(image);
-        if (thumb) {
-          state.thumbnailCache.set(url, thumb);
-        }
-      }
-      resolve(url);
-    };
-    image.onerror = () => resolve(null);
-    image.src = url;
-  });
+  const task = resolveImageUrl(url);
   state.preloadedImageTasks.set(url, task);
   return task;
 }
@@ -3081,21 +3151,36 @@ function applySmartImageSource(element, url) {
   if (!element || !url) {
     return;
   }
-  element.dataset.fullSrc = url;
-  element.dataset.previewSrc = url;
-  const thumb = state.thumbnailCache.get(url);
+  element.dataset.requestedSrc = url;
+  const cachedResolvedUrl = state.resolvedImageUrlCache.get(url);
+  if (cachedResolvedUrl) {
+    element.dataset.fullSrc = cachedResolvedUrl;
+    element.dataset.previewSrc = cachedResolvedUrl;
+  } else {
+    element.dataset.fullSrc = url;
+    element.dataset.previewSrc = url;
+  }
+  const thumb = state.thumbnailCache.get(url) || (cachedResolvedUrl ? state.thumbnailCache.get(cachedResolvedUrl) : "");
   if (thumb) {
     element.src = thumb;
     element.classList.add("smart-thumb-loading");
+  } else if (cachedResolvedUrl) {
+    element.src = cachedResolvedUrl;
   } else {
     element.src = url;
   }
-  preloadImageUrl(url).then((fullUrl) => {
-    if (!fullUrl || element.dataset.fullSrc !== fullUrl) {
+  preloadImageUrl(url).then((resolvedUrl) => {
+    if (element.dataset.requestedSrc !== url) {
       return;
     }
-    if (element.src !== fullUrl) {
-      element.src = fullUrl;
+    if (!resolvedUrl) {
+      element.classList.remove("smart-thumb-loading");
+      return;
+    }
+    element.dataset.fullSrc = resolvedUrl;
+    element.dataset.previewSrc = resolvedUrl;
+    if (element.src !== resolvedUrl) {
+      element.src = resolvedUrl;
     }
     element.classList.remove("smart-thumb-loading");
   });
