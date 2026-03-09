@@ -261,7 +261,7 @@ const CURRENT_SESSION_STORAGE_KEY = "oh-card-current-session-v1";
 const SLOT_TEMPLATE_STORAGE_KEY = "oh-card-slot-template-v1";
 const UI_PREF_STORAGE_KEY = "oh-card-ui-pref-v1";
 const CLOUD_SYNC_STORAGE_KEY = "oh-card-cloud-sync-v1";
-const APP_ASSET_VERSION = "20260309-10";
+const APP_ASSET_VERSION = "20260309-11";
 const BUNDLED_IMAGE_DECK_PATH = `./data/oh-image-deck.json?rev=${APP_ASSET_VERSION}`;
 const BUNDLED_WORD_DECK_PATH = `./data/oh-word-deck.json?rev=${APP_ASSET_VERSION}`;
 
@@ -3821,6 +3821,7 @@ function bindSmartImageLifecycle(element) {
     hideImageFailureUi(element);
     const current = element.currentSrc || element.src;
     if (current) {
+      element.dataset.lastGoodSrc = current;
       element.dataset.fullSrc = current;
       element.dataset.previewSrc = current;
     }
@@ -3895,6 +3896,16 @@ function applySmartImageSource(element, url, options = {}) {
       }
       delete element.dataset.retryingImageOnce;
       element.classList.remove("smart-thumb-loading");
+      const lastGoodSrc = element.dataset.lastGoodSrc || "";
+      if (lastGoodSrc) {
+        if ((element.currentSrc || element.src) !== lastGoodSrc) {
+          element.src = lastGoodSrc;
+        }
+        element.dataset.fullSrc = lastGoodSrc;
+        element.dataset.previewSrc = lastGoodSrc;
+        hideImageFailureUi(element);
+        return;
+      }
       if (suppressFailureUi && (element.currentSrc || element.src)) {
         hideImageFailureUi(element);
         return;
