@@ -2780,21 +2780,30 @@ function handlePreviewImageClick(event) {
   if (pairInteractive) {
     const imageElement = pairInteractive.querySelector(".pair-image-overlay img");
     const wordElement = pairInteractive.querySelector(".pair-word-base img");
+    const displayImageSrc = imageElement?.currentSrc || imageElement?.src || "";
+    const displayWordSrc = wordElement?.currentSrc || wordElement?.src || "";
     const imageSrc =
+      pairInteractive.dataset.previewImageSrc ||
+      imageElement?.dataset.requestedSrc ||
       imageElement?.dataset.fullSrc ||
       imageElement?.currentSrc ||
-      pairInteractive.dataset.previewImageSrc ||
+      imageElement?.src ||
       "";
     const wordSrc =
+      pairInteractive.dataset.previewWordSrc ||
+      wordElement?.dataset.requestedSrc ||
       wordElement?.dataset.fullSrc ||
       wordElement?.currentSrc ||
-      pairInteractive.dataset.previewWordSrc ||
+      wordElement?.src ||
       "";
     const title = pairInteractive.dataset.previewTitle || "";
     const viewport = pairInteractive.querySelector(".pair-viewport");
     const quarter = normalizeQuarter(Number(viewport?.dataset.rotationQuarter || 0));
     if (imageSrc && wordSrc) {
-      openPairPreview(imageSrc, wordSrc, title, quarter, viewport || null);
+      openPairPreview(imageSrc, wordSrc, title, quarter, viewport || null, {
+        displayImageSrc,
+        displayWordSrc
+      });
       return;
     }
   }
@@ -2830,7 +2839,7 @@ function openImagePreview(src, title) {
   document.body.style.overflow = "hidden";
 }
 
-function openPairPreview(imageSrc, wordSrc, title, quarter, sourceViewport = null) {
+function openPairPreview(imageSrc, wordSrc, title, quarter, sourceViewport = null, sourceDisplay = null) {
   if (!imageSrc || !wordSrc) {
     openImagePreview(imageSrc || wordSrc, title);
     return;
@@ -2838,8 +2847,20 @@ function openPairPreview(imageSrc, wordSrc, title, quarter, sourceViewport = nul
   setPreviewMode("pair");
   state.previewSourceViewport = sourceViewport;
   state.previewFitMode = "fit";
-  applySmartImageSource(refs.previewPairImage, imageSrc);
-  applySmartImageSource(refs.previewPairWord, wordSrc);
+  const displayImageSrc = sourceDisplay?.displayImageSrc || "";
+  const displayWordSrc = sourceDisplay?.displayWordSrc || "";
+  if (displayImageSrc) {
+    refs.previewPairImage.src = displayImageSrc;
+    refs.previewPairImage.classList.remove("smart-thumb-loading");
+    hideImageFailureUi(refs.previewPairImage);
+  }
+  if (displayWordSrc) {
+    refs.previewPairWord.src = displayWordSrc;
+    refs.previewPairWord.classList.remove("smart-thumb-loading");
+    hideImageFailureUi(refs.previewPairWord);
+  }
+  applySmartImageSource(refs.previewPairImage, imageSrc, { suppressFailureUi: Boolean(displayImageSrc) });
+  applySmartImageSource(refs.previewPairWord, wordSrc, { suppressFailureUi: Boolean(displayWordSrc) });
   updateCompositeSafeImageFit(refs.previewPairComposite, refs.previewPairImage);
   applyOverlayTuneToElement(refs.previewPairComposite);
   applyPreviewPairRotation(quarter);
@@ -3758,10 +3779,11 @@ function hideImageFailureUi(element) {
   element.classList.remove("image-load-failed");
 }
 
-function applySmartImageSource(element, url) {
+function applySmartImageSource(element, url, options = {}) {
   if (!element || !url) {
     return;
   }
+  const suppressFailureUi = Boolean(options?.suppressFailureUi);
   hideImageFailureUi(element);
   element.dataset.requestedSrc = url;
   const cachedResolvedUrl = state.resolvedImageUrlCache.get(url);
@@ -3790,13 +3812,17 @@ function applySmartImageSource(element, url) {
         element.dataset.retryingImageOnce = "1";
         setTimeout(() => {
           if (element.dataset.requestedSrc === url) {
-            applySmartImageSource(element, url);
+            applySmartImageSource(element, url, options);
           }
         }, 360);
         return;
       }
       delete element.dataset.retryingImageOnce;
       element.classList.remove("smart-thumb-loading");
+      if (suppressFailureUi && (element.currentSrc || element.src)) {
+        hideImageFailureUi(element);
+        return;
+      }
       showImageFailureUi(element, url);
       return;
     }
