@@ -1535,10 +1535,6 @@ select:focus {
   color: #8e4a1b;
 }
 
-.image-host {
-  position: relative;
-}
-
 .image-fail-ui {
   position: absolute;
   inset: 0;

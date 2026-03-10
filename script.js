@@ -261,7 +261,7 @@ const CURRENT_SESSION_STORAGE_KEY = "oh-card-current-session-v1";
 const SLOT_TEMPLATE_STORAGE_KEY = "oh-card-slot-template-v1";
 const UI_PREF_STORAGE_KEY = "oh-card-ui-pref-v1";
 const CLOUD_SYNC_STORAGE_KEY = "oh-card-cloud-sync-v1";
-const APP_ASSET_VERSION = "20260309-13";
+const APP_ASSET_VERSION = "20260309-14";
 const BUNDLED_IMAGE_DECK_PATH = `./data/oh-image-deck.json?rev=${APP_ASSET_VERSION}`;
 const BUNDLED_WORD_DECK_PATH = `./data/oh-word-deck.json?rev=${APP_ASSET_VERSION}`;
 
@@ -3787,7 +3787,13 @@ function ensureImageFailureUi(element) {
   if (!host) {
     return null;
   }
-  host.classList.add("image-host");
+  if (host.dataset.imageHostChecked !== "1") {
+    host.dataset.imageHostChecked = "1";
+    const computedPosition = window.getComputedStyle(host).position;
+    if (!computedPosition || computedPosition === "static") {
+      host.style.position = "relative";
+    }
+  }
   let panel = host.querySelector(".image-fail-ui");
   if (panel) {
     return panel;
