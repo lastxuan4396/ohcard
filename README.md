@@ -70,3 +70,10 @@
 说明：
 - `image` 支持 `https URL`、相对路径（如 `./cards/01.jpg`）、`base64 data URL`
 - 单个卡组建议至少 20 张；最低必须 5 张（才能运行全部玩法）
+
+## GitHub Positioning
+
+- Suggested description: `Interactive OH card studio with guided prompts, facilitation modes, and custom card decks.`
+- Suggested topics: `reflection-tool`, `card-game`, `facilitation`, `creative-coding`, `html`, `css`, `javascript`
+- Metadata notes: see [`docs/repo-metadata.md`](docs/repo-metadata.md)
+
