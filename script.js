@@ -210,6 +210,36 @@ const PROMPT_LAYERS = [
   }
 ];
 
+const PROMPT_STYLES = {
+  gentle: {
+    name: "温和",
+    hint: "降低压迫感，优先建立安全感。",
+    extra: {
+      description: ["如果你愿意，先说最容易开口的那一部分。"],
+      association: ["先选一个最轻的现实片段来联想，不必一次说完整故事。"],
+      inquiry: ["此刻你最需要被照顾的部分是什么？先从最小支持开始。"]
+    }
+  },
+  balanced: {
+    name: "平衡",
+    hint: "兼顾看见事实、感受与行动。",
+    extra: {
+      description: ["把“看到什么”和“这意味着什么”分两句说，避免混在一起。"],
+      association: ["这张牌和你本周哪个具体事件最像？"],
+      inquiry: ["如果只做一件小事让今天更顺一点，你会选什么？"]
+    }
+  },
+  deep: {
+    name: "深挖",
+    hint: "提高反思深度，适合已有准备时使用。",
+    extra: {
+      description: ["除了表层画面，你还忽略了哪个不舒服的细节？"],
+      association: ["这个模式在你人生里重复了多少次？通常由什么触发？"],
+      inquiry: ["这背后你最害怕失去什么？如果不再回避，你准备承担什么？"]
+    }
+  }
+};
+
 const PROMPT_POOL = {
   description: [
     "你看到了什么？",
@@ -331,7 +361,7 @@ const SLOT_TEMPLATE_STORAGE_KEY = "oh-card-slot-template-v1";
 const UI_PREF_STORAGE_KEY = "oh-card-ui-pref-v1";
 const CLOUD_SYNC_STORAGE_KEY = "oh-card-cloud-sync-v1";
 const SESSION_PROTOCOL_STORAGE_KEY = "oh-card-session-protocol-v1";
-const APP_ASSET_VERSION = "20260311-15";
+const APP_ASSET_VERSION = "20260311-16";
 const BUNDLED_IMAGE_DECK_PATH = `./data/oh-image-deck.json?rev=${APP_ASSET_VERSION}`;
 const BUNDLED_WORD_DECK_PATH = `./data/oh-word-deck.json?rev=${APP_ASSET_VERSION}`;
 
@@ -349,6 +379,11 @@ const refs = {
   emotionIntensityInput: document.getElementById("emotionIntensityInput"),
   emotionIntensityValue: document.getElementById("emotionIntensityValue"),
   safetyAlert: document.getElementById("safetyAlert"),
+  groundingPanel: document.getElementById("groundingPanel"),
+  groundingText: document.getElementById("groundingText"),
+  groundingBreathBtn: document.getElementById("groundingBreathBtn"),
+  groundingSenseBtn: document.getElementById("groundingSenseBtn"),
+  groundingSupportBtn: document.getElementById("groundingSupportBtn"),
   questionInput: document.getElementById("questionInput"),
   modeBadge: document.getElementById("modeBadge"),
   modeSwitch: document.getElementById("modeSwitch"),
@@ -373,6 +408,7 @@ const refs = {
   deckValidationSummary: document.getElementById("deckValidationSummary"),
   deckValidationList: document.getElementById("deckValidationList"),
   resetDeckBtn: document.getElementById("resetDeckBtn"),
+  avoidRecentCheckbox: document.getElementById("avoidRecentCheckbox"),
   drawBtn: document.getElementById("drawBtn"),
   reshuffleBtn: document.getElementById("reshuffleBtn"),
   immersiveBtn: document.getElementById("immersiveBtn"),
@@ -382,6 +418,7 @@ const refs = {
   modeGoal: document.getElementById("modeGoal"),
   modeSteps: document.getElementById("modeSteps"),
   promptTabs: document.getElementById("promptTabs"),
+  promptStyleSwitch: document.getElementById("promptStyleSwitch"),
   promptHint: document.getElementById("promptHint"),
   promptList: document.getElementById("promptList"),
   facilitatorToggleBtn: document.getElementById("facilitatorToggleBtn"),
@@ -476,6 +513,8 @@ const state = {
   protocol: loadSessionProtocol(),
   drawVersion: 0,
   isDrawing: false,
+  avoidRecent: true,
+  promptStyleId: "balanced",
   layerVisits: new Set(),
   facilitator: {
     enabled: false,
@@ -488,6 +527,7 @@ const state = {
     action: "",
     support: ""
   },
+  groundingTimerId: null,
   history: loadHistory(),
   wordDeck: cloneCards(DEFAULT_WORD_DECK),
   imageDeck: cloneCards(DEFAULT_IMAGE_DECK),
@@ -527,6 +567,7 @@ function init() {
   hydrateUiPreference();
   hydrateCloudSyncInputs();
   renderSessionProtocol();
+  renderGroundingPanel();
   renderPresetSwitch();
   renderModeSwitch();
   renderModeDetail();
@@ -535,6 +576,7 @@ function init() {
   renderDeckStatus();
   renderOverlayTuneControls();
   renderPromptTabs();
+  renderPromptStyleSwitch();
   renderFacilitatorPanel();
   renderPlaybook();
   renderHistory();
@@ -597,9 +639,13 @@ function bindEvents() {
       syncCurrentSessionToHistory();
     }
     renderSessionProtocol();
+    renderGroundingPanel();
     renderClosurePanel();
     detectSafetyRisk();
   });
+  refs.groundingBreathBtn.addEventListener("click", runGroundingBreath);
+  refs.groundingSenseBtn.addEventListener("click", runGroundingSense);
+  refs.groundingSupportBtn.addEventListener("click", runGroundingSupport);
 
   refs.questionInput.addEventListener("input", () => {
     if (state.currentSession) {
@@ -635,6 +681,11 @@ function bindEvents() {
     }
     setDeckType(button.dataset.deckType);
   });
+  refs.avoidRecentCheckbox.addEventListener("change", () => {
+    state.avoidRecent = refs.avoidRecentCheckbox.checked;
+    persistUiPreference();
+    setSummary(state.avoidRecent ? "已开启防重复抽卡。" : "已关闭防重复抽卡。", false);
+  });
 
   refs.layoutDirectionSwitch.addEventListener("click", (event) => {
     const button = event.target.closest("button[data-layout-direction]");
@@ -656,6 +707,13 @@ function bindEvents() {
     renderFacilitatorPanel();
     renderClosurePanel();
     renderPrompts();
+  });
+  refs.promptStyleSwitch.addEventListener("click", (event) => {
+    const button = event.target.closest("button[data-prompt-style]");
+    if (!button) {
+      return;
+    }
+    setPromptStyle(button.dataset.promptStyle);
   });
 
   refs.drawBtn.addEventListener("click", runDraw);
@@ -823,6 +881,55 @@ function renderSessionProtocol() {
   refs.drawBtn.disabled = state.protocol.paused;
 }
 
+function renderGroundingPanel() {
+  const shouldShow = Number(state.protocol.emotion || 3) >= 4 || state.protocol.paused;
+  refs.groundingPanel.hidden = !shouldShow;
+  if (!shouldShow) {
+    clearGroundingTimer();
+    refs.groundingText.textContent = "当前强度偏高，建议先做 60 秒稳定练习。";
+  }
+}
+
+function clearGroundingTimer() {
+  if (state.groundingTimerId) {
+    clearInterval(state.groundingTimerId);
+    state.groundingTimerId = null;
+  }
+}
+
+function runGroundingBreath() {
+  clearGroundingTimer();
+  let left = 60;
+  refs.groundingText.textContent = `呼吸练习中：${left}s（吸4秒-停4秒-呼6秒，循环）`;
+  state.groundingTimerId = setInterval(() => {
+    left -= 1;
+    if (left <= 0) {
+      clearGroundingTimer();
+      refs.groundingText.textContent = "已完成 60 秒稳定练习。现在再看看牌面，哪里变清晰了？";
+      return;
+    }
+    refs.groundingText.textContent = `呼吸练习中：${left}s（吸4秒-停4秒-呼6秒，循环）`;
+  }, 1000);
+}
+
+function runGroundingSense() {
+  clearGroundingTimer();
+  refs.groundingText.textContent = "五感落地：说出 5样看到的、4样触到的、3样听到的、2样闻到/尝到的、1个此刻最重要的支持来源。";
+}
+
+async function runGroundingSupport() {
+  clearGroundingTimer();
+  const pool = [
+    "你不需要一次解决所有问题，先做下一步就够了。",
+    "现在的感受是真实的，但它不会永远固定不变。",
+    "先稳住身体，再处理问题；节奏比速度更重要。",
+    "你可以求助，这不是软弱，而是对自己负责。"
+  ];
+  const line = pool[Math.floor(Math.random() * pool.length)];
+  refs.groundingText.textContent = `支持语：${line}`;
+  await copyText(line);
+}
+
 function detectSafetyRisk() {
   const text = `${refs.questionInput.value} ${refs.noteInput.value} ${state.protocol.intent || ""}`.trim();
   const highRiskByWords = HIGH_RISK_PATTERN.test(text);
@@ -848,6 +955,34 @@ function renderPresetSwitch() {
     button.innerHTML = `<strong>${preset.name}</strong><span>${preset.note}</span>`;
     refs.presetSwitch.appendChild(button);
   });
+}
+
+function renderPromptStyleSwitch() {
+  refs.promptStyleSwitch.innerHTML = "";
+  Object.entries(PROMPT_STYLES).forEach(([styleId, style]) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = `prompt-style-btn ${styleId === state.promptStyleId ? "active" : ""}`;
+    button.dataset.promptStyle = styleId;
+    button.innerHTML = `<strong>${style.name}</strong><span>${style.hint}</span>`;
+    refs.promptStyleSwitch.appendChild(button);
+  });
+}
+
+function setPromptStyle(styleId) {
+  if (state.readonlyMode) {
+    setSummary("只读分享模式下不能切换提问风格。", true);
+    return;
+  }
+  if (!(styleId in PROMPT_STYLES)) {
+    return;
+  }
+  state.promptStyleId = styleId;
+  persistUiPreference();
+  renderPromptStyleSwitch();
+  renderPromptTabs();
+  renderPrompts();
+  setSummary(`提问风格已切换为：${PROMPT_STYLES[styleId].name}`, false);
 }
 
 function applySessionPreset(presetId) {
@@ -1035,6 +1170,7 @@ function renderDeckStatus() {
   const wordSource = sourceLabel[state.deckSource.word] || "内置";
   const imageSource = sourceLabel[state.deckSource.image] || "内置";
   refs.deckStatus.textContent = `字卡 ${state.wordDeck.length} 张（${wordSource}） / 图卡 ${state.imageDeck.length} 张（${imageSource}）`;
+  refs.avoidRecentCheckbox.checked = Boolean(state.avoidRecent);
 }
 
 function renderWorkflowSteps() {
@@ -1520,7 +1656,8 @@ function renderPromptTabs() {
     refs.promptTabs.appendChild(button);
   });
   const layer = PROMPT_LAYERS.find((entry) => entry.id === state.layerId);
-  refs.promptHint.textContent = layer ? layer.hint : "";
+  const style = PROMPT_STYLES[state.promptStyleId] || PROMPT_STYLES.balanced;
+  refs.promptHint.textContent = layer ? `${layer.hint} 当前风格：${style.name}（${style.hint}）` : "";
 }
 
 function renderPlaybook() {
@@ -1658,9 +1795,11 @@ function ensureDeckReady(count) {
 }
 
 function drawCards(count) {
+  const avoidWordNames = state.avoidRecent ? getRecentCardNameSet("word") : new Set();
+  const avoidImageNames = state.avoidRecent ? getRecentCardNameSet("image") : new Set();
   if (state.deckTypeId === "pair") {
-    const words = pickUnique(state.wordDeck, count);
-    const images = pickUnique(state.imageDeck, count);
+    const words = pickUnique(state.wordDeck, count, avoidWordNames);
+    const images = pickUnique(state.imageDeck, count, avoidImageNames);
     return words.map((wordCard, index) => {
       const imageCard = images[index];
       return {
@@ -1676,10 +1815,10 @@ function drawCards(count) {
   }
 
   if (state.deckTypeId === "image") {
-    return pickUnique(state.imageDeck, count).map((card) => ({ ...card, kind: "image" }));
+    return pickUnique(state.imageDeck, count, avoidImageNames).map((card) => ({ ...card, kind: "image" }));
   }
 
-  return pickUnique(state.wordDeck, count).map((card) => ({ ...card, kind: "word" }));
+  return pickUnique(state.wordDeck, count, avoidWordNames).map((card) => ({ ...card, kind: "word" }));
 }
 
 function renderSpread(cards, slotLabels) {
@@ -1738,7 +1877,8 @@ function fillCardFront(front, card, slotLabel) {
     if (card.wordCard.image) {
       const wordImage = document.createElement("img");
       wordImage.alt = card.wordCard.name;
-      wordImage.loading = "lazy";
+      wordImage.loading = "eager";
+      wordImage.decoding = "async";
       applySmartImageSource(wordImage, card.wordCard.image, { suppressFailureUi: true });
       wordBase.appendChild(wordImage);
     } else {
@@ -1752,7 +1892,8 @@ function fillCardFront(front, card, slotLabel) {
     imageOverlay.className = "pair-image-overlay";
     const image = document.createElement("img");
     image.alt = card.imageCard.name;
-    image.loading = "lazy";
+    image.loading = "eager";
+    image.decoding = "async";
     applySmartImageSource(image, card.imageCard.image, { suppressFailureUi: true });
     imageOverlay.appendChild(image);
 
@@ -1810,7 +1951,8 @@ function fillCardFront(front, card, slotLabel) {
     imageBlock.className = "image-block";
     const image = document.createElement("img");
     image.alt = card.name;
-    image.loading = "lazy";
+    image.loading = "eager";
+    image.decoding = "async";
     applySmartImageSource(image, card.image);
     makePreviewableImage(image, `${card.name}（图卡）`);
     imageBlock.appendChild(image);
@@ -1837,7 +1979,8 @@ function fillCardFront(front, card, slotLabel) {
     wordImageBlock.className = "image-block word-image-block";
     const image = document.createElement("img");
     image.alt = card.name;
-    image.loading = "lazy";
+    image.loading = "eager";
+    image.decoding = "async";
     applySmartImageSource(image, card.image);
     makePreviewableImage(image, `${card.name}（字卡）`);
     wordImageBlock.appendChild(image);
@@ -1890,6 +2033,9 @@ function getActiveSlotLabels(mode) {
 
 function buildPrompts(layerId, cards, mode, slotLabels) {
   const base = shuffle(PROMPT_POOL[layerId]).slice(0, 3);
+  const style = PROMPT_STYLES[state.promptStyleId] || PROMPT_STYLES.balanced;
+  const styleExtraPool = Array.isArray(style.extra?.[layerId]) ? style.extra[layerId] : [];
+  const styleExtra = shuffle(styleExtraPool).slice(0, 1);
 
   const cardPrompts = cards.map((card, index) => {
     const slot = slotLabels[index] || `位置 ${index + 1}`;
@@ -1928,7 +2074,11 @@ function buildPrompts(layerId, cards, mode, slotLabels) {
         "B 方：你最先忽略了哪一部分？这背后可能有什么担心？"
       ]
     : [];
-  return [...base, ...shuffle(cardPrompts).slice(0, 2), relationPrompt, ...dualPrompts];
+  const deepExtra =
+    state.promptStyleId === "deep" && layerId === "inquiry"
+      ? ["如果把这次卡住定义为一个旧模式，你愿意从哪一刻开始打断它？"]
+      : [];
+  return [...base, ...shuffle(cardPrompts).slice(0, 2), relationPrompt, ...dualPrompts, ...styleExtra, ...deepExtra];
 }
 
 function prependHistory(session) {
@@ -2197,6 +2347,8 @@ async function copyCurrentReport() {
     `玩法：${mode.name}`,
     `卡组：${DECK_TYPES[state.deckTypeId].name}`,
     `方向：${LAYOUT_DIRECTIONS[state.layoutDirection].name}`,
+    `提问风格：${PROMPT_STYLES[state.promptStyleId]?.name || "平衡"}`,
+    `抽卡防重复：${state.avoidRecent ? "开启" : "关闭"}`,
     "牌面：",
     ...state.currentCards.map((card, index) => formatCardLineForReport(card, getActiveSlotLabels(mode)[index] || `位置 ${index + 1}`)),
     `当前提问层：${PROMPT_LAYERS.find((layer) => layer.id === state.layerId)?.name || ""}`,
@@ -2237,6 +2389,8 @@ function buildConsultReportText() {
     `- 情绪强度：${EMOTION_LABELS[state.protocol.emotion] || "3 · 中等"}`,
     `- 议题：${refs.questionInput.value.trim() || "（未填写）"}`,
     `- 玩法：${mode.name} / ${DECK_TYPES[state.deckTypeId].name}`,
+    `- 提问风格：${PROMPT_STYLES[state.promptStyleId]?.name || "平衡"}`,
+    `- 抽卡防重复：${state.avoidRecent ? "开启" : "关闭"}`,
     "",
     "## 牌面",
     ...state.currentCards.map((card, index) => formatCardLineForReport(card, labels[index] || `位置 ${index + 1}`)),
@@ -2302,6 +2456,7 @@ function resetBoard() {
   }
   state.currentCards = [];
   state.currentSession = null;
+  clearGroundingTimer();
   state.closure = { summary: "", action: "", support: "" };
   resetLayerVisits();
   state.facilitator.stageIndex = 0;
@@ -3140,8 +3295,48 @@ function escapeSVG(value) {
     .replaceAll("'", "&#39;");
 }
 
-function pickUnique(deck, count) {
-  return shuffle(deck).slice(0, count).map((card) => ({ ...card }));
+function pickUnique(deck, count, avoidNameSet = new Set()) {
+  return pickUniqueWithAvoid(deck, count, avoidNameSet);
+}
+
+function pickUniqueWithAvoid(deck, count, avoidNameSet) {
+  const avoid = avoidNameSet instanceof Set ? avoidNameSet : new Set();
+  const preferred = shuffle(deck.filter((card) => !avoid.has(card?.name)));
+  const fallback = shuffle(deck.filter((card) => avoid.has(card?.name)));
+  const selected = preferred.slice(0, count);
+  if (selected.length < count) {
+    selected.push(...fallback.slice(0, count - selected.length));
+  }
+  return selected.map((card) => ({ ...card }));
+}
+
+function getRecentCardNameSet(kind) {
+  const set = new Set();
+  const recent = (state.history || []).slice(0, 3);
+  recent.forEach((session) => {
+    (session.cards || []).forEach((card) => {
+      const cardKind = getCardKind(card);
+      if (kind === "word") {
+        if (cardKind === "pair") {
+          if (card.wordCard?.name) {
+            set.add(card.wordCard.name);
+          }
+        } else if (cardKind === "word" && card.name) {
+          set.add(card.name);
+        }
+      }
+      if (kind === "image") {
+        if (cardKind === "pair") {
+          if (card.imageCard?.name) {
+            set.add(card.imageCard.name);
+          }
+        } else if (cardKind === "image" && card.name) {
+          set.add(card.name);
+        }
+      }
+    });
+  });
+  return set;
 }
 
 function shuffle(list) {
@@ -4370,6 +4565,29 @@ function bindSmartImageLifecycle(element) {
       element.dataset.previewSrc = current;
     }
   });
+  element.addEventListener("error", () => {
+    const requested = element.dataset.requestedSrc || element.dataset.fullSrc || "";
+    if (!requested || requested.startsWith("data:")) {
+      return;
+    }
+    if (element.dataset.domErrorRetryOnce !== "1") {
+      element.dataset.domErrorRetryOnce = "1";
+      state.resolvedImageUrlCache.delete(requested);
+      state.preloadedImageTasks.delete(requested);
+      state.resolvingImageUrlTasks.delete(requested);
+      setTimeout(() => {
+        if (element.dataset.requestedSrc !== requested) {
+          return;
+        }
+        applySmartImageSource(element, requested, {
+          suppressFailureUi: shouldSuppressFailureUiByContext(element)
+        });
+      }, 180);
+      return;
+    }
+    delete element.dataset.domErrorRetryOnce;
+    showImageFailureUi(element, requested);
+  });
 }
 
 function showImageFailureUi(element, requestedUrl) {
@@ -4403,6 +4621,8 @@ function applySmartImageSource(element, url, options = {}) {
   if (!element || !url) {
     return;
   }
+  element.loading = "eager";
+  element.decoding = "async";
   bindSmartImageLifecycle(element);
   const suppressFailureUi = Boolean(options?.suppressFailureUi);
   hideImageFailureUi(element);
@@ -5092,7 +5312,9 @@ function renderCloudSyncStatus(message = "") {
 function persistUiPreference() {
   const payload = {
     focusView: Boolean(state.focusView),
-    dualMode: Boolean(state.dualMode)
+    dualMode: Boolean(state.dualMode),
+    avoidRecent: Boolean(state.avoidRecent),
+    promptStyleId: state.promptStyleId in PROMPT_STYLES ? state.promptStyleId : "balanced"
   };
   localStorage.setItem(UI_PREF_STORAGE_KEY, JSON.stringify(payload));
 }
@@ -5109,6 +5331,8 @@ function hydrateUiPreference() {
     }
     state.focusView = Boolean(parsed.focusView);
     state.dualMode = Boolean(parsed.dualMode);
+    state.avoidRecent = parsed.avoidRecent !== false;
+    state.promptStyleId = parsed.promptStyleId in PROMPT_STYLES ? parsed.promptStyleId : "balanced";
   } catch (error) {
     console.warn("hydrateUiPreference failed", error);
   }
@@ -5123,6 +5347,8 @@ function buildCurrentSessionSnapshot() {
     deckTypeId: state.deckTypeId,
     layoutDirection: state.layoutDirection,
     layerId: state.layerId,
+    promptStyleId: state.promptStyleId,
+    avoidRecent: Boolean(state.avoidRecent),
     question: refs.questionInput.value.trim(),
     note: refs.noteInput.value.trim(),
     dualMode: Boolean(state.dualMode),
@@ -5183,6 +5409,8 @@ function hydrateCurrentSessionSnapshot() {
     state.deckTypeId = parsed.deckTypeId in DECK_TYPES ? parsed.deckTypeId : inferDeckTypeFromCards(parsed.currentCards || []);
     state.layoutDirection = parsed.layoutDirection in LAYOUT_DIRECTIONS ? parsed.layoutDirection : "up";
     state.layerId = parsed.layerId && parsed.layerId in PROMPT_POOL ? parsed.layerId : "description";
+    state.promptStyleId = parsed.promptStyleId in PROMPT_STYLES ? parsed.promptStyleId : state.promptStyleId;
+    state.avoidRecent = parsed.avoidRecent !== false;
     if (parsed.protocol && typeof parsed.protocol === "object") {
       state.protocol = {
         intent: typeof parsed.protocol.intent === "string" ? parsed.protocol.intent : state.protocol.intent,
@@ -5232,6 +5460,7 @@ function hydrateCurrentSessionSnapshot() {
     renderDeckTypeSwitch();
     renderLayoutDirectionSwitch();
     renderPromptTabs();
+    renderPromptStyleSwitch();
     renderDualModePanel();
     renderSlotEditor();
     renderSpread(state.currentCards, state.currentSession?.slotLabels || getModeLabels(state.modeId, MODES[state.modeId].count));
@@ -5289,7 +5518,9 @@ function buildSyncPayload() {
     },
     uiPreference: {
       dualMode: state.dualMode,
-      focusView: state.focusView
+      focusView: state.focusView,
+      avoidRecent: Boolean(state.avoidRecent),
+      promptStyleId: state.promptStyleId
     },
     currentSnapshot: buildCurrentSessionSnapshot()
   };
@@ -5343,6 +5574,8 @@ function applySyncPayload(payload) {
   if (payload.uiPreference && typeof payload.uiPreference === "object") {
     state.dualMode = Boolean(payload.uiPreference.dualMode);
     state.focusView = Boolean(payload.uiPreference.focusView);
+    state.avoidRecent = payload.uiPreference.avoidRecent !== false;
+    state.promptStyleId = payload.uiPreference.promptStyleId in PROMPT_STYLES ? payload.uiPreference.promptStyleId : state.promptStyleId;
     persistUiPreference();
   }
   if (payload.currentSnapshot && typeof payload.currentSnapshot === "object") {
@@ -5351,9 +5584,11 @@ function applySyncPayload(payload) {
   }
   renderHistory();
   renderAnalytics();
+  renderDeckStatus();
   renderSlotEditor();
   renderDualModePanel();
   renderFocusView();
+  renderPromptStyleSwitch();
   renderFacilitatorPanel();
   renderClosurePanel();
 }
@@ -5444,6 +5679,8 @@ function buildReadonlySharePayload() {
     deckTypeId: state.deckTypeId,
     layoutDirection: state.layoutDirection,
     layerId: state.layerId,
+    promptStyleId: state.promptStyleId,
+    avoidRecent: Boolean(state.avoidRecent),
     protocol: {
       intent: state.protocol.intent || "",
       consent: Boolean(state.protocol.consent),
@@ -5504,6 +5741,8 @@ function hydrateReadonlySessionFromHash() {
     state.deckTypeId = payload.deckTypeId in DECK_TYPES ? payload.deckTypeId : inferDeckTypeFromCards(payload.cards || []);
     state.layoutDirection = payload.layoutDirection in LAYOUT_DIRECTIONS ? payload.layoutDirection : "up";
     state.layerId = payload.layerId in PROMPT_POOL ? payload.layerId : "description";
+    state.promptStyleId = payload.promptStyleId in PROMPT_STYLES ? payload.promptStyleId : state.promptStyleId;
+    state.avoidRecent = payload.avoidRecent !== false;
     if (payload.protocol && typeof payload.protocol === "object") {
       state.protocol = {
         intent: typeof payload.protocol.intent === "string" ? payload.protocol.intent : "",
@@ -5568,6 +5807,7 @@ function hydrateReadonlySessionFromHash() {
     renderDeckTypeSwitch();
     renderLayoutDirectionSwitch();
     renderPromptTabs();
+    renderPromptStyleSwitch();
     renderDualModePanel();
     renderSlotEditor();
     renderSpread(state.currentCards, state.currentSession.slotLabels);
@@ -5604,8 +5844,12 @@ function applyReadonlyModeState() {
     refs.consentCheckbox,
     refs.pauseProtocolBtn,
     refs.emotionIntensityInput,
+    refs.groundingBreathBtn,
+    refs.groundingSenseBtn,
+    refs.groundingSupportBtn,
     refs.facilitatorToggleBtn,
     refs.facilitatorNextBtn,
+    refs.avoidRecentCheckbox,
     refs.questionInput,
     refs.noteInput,
     refs.dualNoteA,

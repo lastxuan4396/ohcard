@@ -5,15 +5,15 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#c17b3f" />
     <title>OH Card Studio</title>
-    <link rel="manifest" href="./manifest.webmanifest?rev=20260311-15" />
-    <link rel="icon" type="image/svg+xml" href="./favicon.svg?rev=20260311-15" />
+    <link rel="manifest" href="./manifest.webmanifest?rev=20260311-16" />
+    <link rel="icon" type="image/svg+xml" href="./favicon.svg?rev=20260311-16" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
       href="https://fonts.googleapis.com/css2?family=Ma+Shan+Zheng&family=Noto+Serif+SC:wght@400;600;700&display=swap"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="./styles.css?rev=20260311-15" />
+    <link rel="stylesheet" href="./styles.css?rev=20260311-16" />
   </head>
   <body>
     <div class="ambient">
@@ -57,6 +57,14 @@
               <span id="emotionIntensityValue" class="mode-badge">3 · 中等</span>
             </div>
             <p id="safetyAlert" class="safety-alert" hidden></p>
+            <div id="groundingPanel" class="grounding-panel" hidden>
+              <p id="groundingText" class="deck-note">当前强度偏高，建议先做 60 秒稳定练习。</p>
+              <div class="actions compact">
+                <button id="groundingBreathBtn" class="btn btn-ghost" type="button">60秒呼吸</button>
+                <button id="groundingSenseBtn" class="btn btn-ghost" type="button">五感落地</button>
+                <button id="groundingSupportBtn" class="btn btn-ghost" type="button">支持语</button>
+              </div>
+            </div>
           </div>
 
           <h2>1. 设定主题</h2>
@@ -111,6 +119,10 @@
             <p class="deck-note">
               你可以先用内置示例图卡和字卡，也可以导入你自己的卡组 JSON（支持图片 URL 或 base64）。
             </p>
+            <label class="protocol-check">
+              <input id="avoidRecentCheckbox" type="checkbox" checked />
+              抽卡时尽量避开最近 3 局已出现的卡（减少重复）
+            </label>
             <p id="deckStatus" class="deck-status"></p>
             <div class="actions compact">
               <button id="importImageDeckBtn" class="btn btn-ghost">导入图卡 JSON</button>
@@ -230,6 +242,7 @@
         <section class="panel guide-panel">
           <h2>5. 引导提问</h2>
           <div id="promptTabs" class="prompt-tabs"></div>
+          <div id="promptStyleSwitch" class="prompt-style-switch"></div>
           <p id="promptHint" class="prompt-hint"></p>
           <ol id="promptList" class="prompt-list"></ol>
           <div class="facilitator-panel">
@@ -379,6 +392,6 @@
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
-    <script src="./script.js?rev=20260311-15"></script>
+    <script src="./script.js?rev=20260311-16"></script>
   </body>
 </html>

@@ -316,6 +316,14 @@ select:focus {
   padding: 8px 10px;
 }
 
+.grounding-panel {
+  margin-top: 10px;
+  border: 1px solid rgba(46, 111, 103, 0.36);
+  border-radius: 10px;
+  background: rgba(232, 247, 243, 0.76);
+  padding: 8px 10px;
+}
+
 .quick-preset {
   margin-top: 10px;
   border: 1px solid rgba(125, 100, 70, 0.2);
@@ -1314,6 +1322,41 @@ select:focus {
   gap: 8px;
 }
 
+.prompt-style-switch {
+  margin-top: 8px;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.prompt-style-btn {
+  border: 1px solid rgba(137, 108, 75, 0.26);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.7);
+  padding: 7px 6px;
+  cursor: pointer;
+  text-align: center;
+}
+
+.prompt-style-btn strong {
+  display: block;
+  font-size: 13px;
+}
+
+.prompt-style-btn span {
+  display: block;
+  margin-top: 2px;
+  font-size: 11px;
+  color: var(--ink-soft);
+  line-height: 1.35;
+}
+
+.prompt-style-btn.active {
+  background: rgba(177, 100, 44, 0.14);
+  border-color: rgba(177, 100, 44, 0.52);
+  color: #5f391d;
+}
+
 .prompt-tab {
   border: 1px solid rgba(137, 108, 75, 0.26);
   border-radius: 10px;
@@ -1752,6 +1795,7 @@ body.readonly-mode .mode-switch,
 body.readonly-mode .deck-type-switch,
 body.readonly-mode .direction-switch,
 body.readonly-mode .prompt-tabs,
+body.readonly-mode .prompt-style-switch,
 body.readonly-mode .facilitator-panel {
   pointer-events: none;
   opacity: 0.72;
@@ -1867,6 +1911,10 @@ body.immersive-mode .deck-zone {
   }
 
   .preset-switch {
+    grid-template-columns: 1fr;
+  }
+
+  .prompt-style-switch {
     grid-template-columns: 1fr;
   }
 
