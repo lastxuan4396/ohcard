@@ -266,6 +266,98 @@ select:focus {
   background: rgba(255, 255, 255, 0.54);
 }
 
+.session-protocol {
+  margin-bottom: 12px;
+  border: 1px solid rgba(125, 100, 70, 0.2);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.58);
+  padding: 10px 12px;
+}
+
+.session-protocol h2 {
+  margin-bottom: 8px;
+}
+
+.protocol-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  margin-top: 8px;
+}
+
+.protocol-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--ink-mid);
+}
+
+.protocol-check input[type="checkbox"] {
+  transform: translateY(1px);
+}
+
+.protocol-range {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 8px;
+  align-items: center;
+}
+
+.safety-alert {
+  margin: 10px 0 0;
+  border-radius: 10px;
+  border: 1px solid rgba(179, 62, 47, 0.4);
+  background: rgba(179, 62, 47, 0.12);
+  color: #8a2e22;
+  font-size: 12px;
+  line-height: 1.5;
+  padding: 8px 10px;
+}
+
+.quick-preset {
+  margin-top: 10px;
+  border: 1px solid rgba(125, 100, 70, 0.2);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.54);
+  padding: 8px;
+}
+
+.preset-switch {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.preset-btn {
+  border: 1px solid rgba(136, 106, 73, 0.3);
+  background: rgba(255, 255, 255, 0.76);
+  border-radius: 10px;
+  padding: 8px 7px;
+  cursor: pointer;
+  text-align: left;
+  transition: transform 0.2s ease, border-color 0.2s ease;
+}
+
+.preset-btn:hover {
+  transform: translateY(-1px);
+  border-color: rgba(46, 111, 103, 0.48);
+}
+
+.preset-btn strong {
+  display: block;
+  font-size: 13px;
+}
+
+.preset-btn span {
+  display: block;
+  margin-top: 3px;
+  font-size: 11px;
+  color: var(--ink-soft);
+  line-height: 1.4;
+}
+
 .deck-type-switch {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -1255,6 +1347,57 @@ select:focus {
   min-height: 178px;
 }
 
+.facilitator-panel {
+  margin-top: 10px;
+  border: 1px solid rgba(128, 98, 66, 0.2);
+  border-radius: 12px;
+  padding: 10px;
+  background: rgba(255, 255, 255, 0.62);
+}
+
+.facilitator-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+
+.facilitator-head h3 {
+  margin: 0;
+  font-size: 16px;
+}
+
+.facilitator-checklist {
+  margin: 8px 0 0;
+  padding-left: 18px;
+  display: grid;
+  gap: 6px;
+}
+
+.facilitator-item {
+  color: var(--ink-mid);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.facilitator-item strong {
+  display: block;
+  color: var(--ink-strong);
+  font-size: 13px;
+}
+
+.facilitator-item.is-current {
+  color: #2b6058;
+}
+
+.facilitator-item.is-current strong {
+  color: #24554e;
+}
+
+.facilitator-item.is-done strong {
+  color: #497368;
+}
+
 .playbook-grid {
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
@@ -1340,6 +1483,18 @@ select:focus {
   border-radius: 12px;
   border: 1px solid rgba(123, 96, 66, 0.22);
   background: rgba(255, 255, 255, 0.58);
+}
+
+.closure-panel {
+  margin-top: 12px;
+  padding: 10px;
+  border-radius: 12px;
+  border: 1px solid rgba(123, 96, 66, 0.22);
+  background: rgba(255, 255, 255, 0.58);
+}
+
+.closure-panel h3 {
+  margin: 0 0 6px;
 }
 
 .replay-assistant-head {
@@ -1498,7 +1653,7 @@ select:focus {
 
 .analytics-grid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 10px;
 }
 
@@ -1590,6 +1745,16 @@ body.readonly-mode .control-panel input,
 body.readonly-mode .control-panel textarea,
 body.readonly-mode .note-panel textarea {
   opacity: 0.7;
+}
+
+body.readonly-mode .preset-switch,
+body.readonly-mode .mode-switch,
+body.readonly-mode .deck-type-switch,
+body.readonly-mode .direction-switch,
+body.readonly-mode .prompt-tabs,
+body.readonly-mode .facilitator-panel {
+  pointer-events: none;
+  opacity: 0.72;
 }
 
 body.immersive-mode .app-header,
@@ -1698,6 +1863,10 @@ body.immersive-mode .deck-zone {
   }
 
   .deck-type-switch {
+    grid-template-columns: 1fr;
+  }
+
+  .preset-switch {
     grid-template-columns: 1fr;
   }
 

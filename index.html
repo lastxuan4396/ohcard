@@ -5,15 +5,15 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#c17b3f" />
     <title>OH Card Studio</title>
-    <link rel="manifest" href="./manifest.webmanifest?rev=20260309-14" />
-    <link rel="icon" type="image/svg+xml" href="./favicon.svg?rev=20260309-14" />
+    <link rel="manifest" href="./manifest.webmanifest?rev=20260311-15" />
+    <link rel="icon" type="image/svg+xml" href="./favicon.svg?rev=20260311-15" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
       href="https://fonts.googleapis.com/css2?family=Ma+Shan+Zheng&family=Noto+Serif+SC:wght@400;600;700&display=swap"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="./styles.css?rev=20260309-14" />
+    <link rel="stylesheet" href="./styles.css?rev=20260311-15" />
   </head>
   <body>
     <div class="ambient">
@@ -37,6 +37,28 @@
 
       <main class="main-grid">
         <section class="panel control-panel">
+          <div class="session-protocol">
+            <h2>0. 开场协议</h2>
+            <p class="deck-note">
+              OH 卡是投射式探索工具，不做诊断、不贴标签。你可以随时暂停，先确保安全与可承受节奏。
+            </p>
+            <label class="label" for="sessionIntentInput">本轮意图（可选）</label>
+            <input id="sessionIntentInput" type="text" placeholder="例如：我想厘清本周最关键的一个选择" />
+            <div class="protocol-row">
+              <label class="protocol-check">
+                <input id="consentCheckbox" type="checkbox" />
+                我同意：本次以探索为主，不做医学/心理诊断结论
+              </label>
+              <button id="pauseProtocolBtn" class="btn btn-ghost btn-small" type="button">暂停模式</button>
+            </div>
+            <label class="label" for="emotionIntensityInput">当前情绪强度（1-5）</label>
+            <div class="protocol-range">
+              <input id="emotionIntensityInput" type="range" min="1" max="5" step="1" value="3" />
+              <span id="emotionIntensityValue" class="mode-badge">3 · 中等</span>
+            </div>
+            <p id="safetyAlert" class="safety-alert" hidden></p>
+          </div>
+
           <h2>1. 设定主题</h2>
           <label class="label" for="questionInput">你现在最想探索的问题</label>
           <textarea
@@ -49,6 +71,10 @@
             <span id="modeBadge" class="mode-badge"></span>
           </div>
           <div id="modeSwitch" class="mode-switch"></div>
+          <div class="quick-preset">
+            <h3>玩法预设</h3>
+            <div id="presetSwitch" class="preset-switch"></div>
+          </div>
 
           <div class="deck-config">
             <h3>3. 选择卡组</h3>
@@ -206,6 +232,15 @@
           <div id="promptTabs" class="prompt-tabs"></div>
           <p id="promptHint" class="prompt-hint"></p>
           <ol id="promptList" class="prompt-list"></ol>
+          <div class="facilitator-panel">
+            <div class="facilitator-head">
+              <h3>主持人模式</h3>
+              <button id="facilitatorToggleBtn" class="btn btn-ghost btn-small" type="button">开启</button>
+            </div>
+            <p id="facilitatorStatus" class="deck-note">未开启。开启后会按「描述 -> 联想 -> 探究 -> 行动」分阶段推进。</p>
+            <ol id="facilitatorChecklist" class="facilitator-checklist"></ol>
+            <button id="facilitatorNextBtn" class="btn btn-ghost" type="button">下一阶段</button>
+          </div>
           <div class="actions compact">
             <button id="regenPromptBtn" class="btn btn-ghost">换一组提问</button>
             <button id="copyReportBtn" class="btn btn-primary">复制本次引导文本</button>
@@ -258,6 +293,16 @@
             <ul id="actionChecklist" class="action-checklist"></ul>
             <p id="actionStats" class="action-stats">完成率：0%（0/3）</p>
           </div>
+          <div class="closure-panel">
+            <h3>结束整合</h3>
+            <p id="closureSummary" class="deck-note">完成抽卡后可生成一句话整合，帮助你收束本次探索。</p>
+            <p id="closureAction" class="deck-note">72 小时行动将从你的牌面与记录自动提炼。</p>
+            <p id="closureSupport" class="deck-note">支持提醒：高压状态下优先休息、联系可信赖的人或专业支持。</p>
+            <div class="actions compact">
+              <button id="generateClosureBtn" class="btn btn-ghost">生成结束整合</button>
+              <button id="copyClosureBtn" class="btn btn-primary">复制结束整合</button>
+            </div>
+          </div>
         </section>
 
         <section class="panel history-panel">
@@ -293,6 +338,10 @@
             <article class="analytics-item">
               <h3>行动完成率</h3>
               <p id="analyticsActionRate" class="analytics-number">0%</p>
+            </article>
+            <article class="analytics-item">
+              <h3>会话质量分</h3>
+              <p id="analyticsSessionQuality" class="analytics-number">0</p>
             </article>
           </div>
         </section>
@@ -330,6 +379,6 @@
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
-    <script src="./script.js?rev=20260309-14"></script>
+    <script src="./script.js?rev=20260311-15"></script>
   </body>
 </html>

@@ -112,6 +112,75 @@ const LAYOUT_DIRECTIONS = {
   }
 };
 
+const SESSION_PRESETS = {
+  warmup: {
+    name: "暖场单卡",
+    modeId: "focus",
+    deckTypeId: "pair",
+    layoutDirection: "up",
+    note: "适合第一次开局，先看当下最核心信号。"
+  },
+  decision: {
+    name: "决策拆解",
+    modeId: "diamond",
+    deckTypeId: "pair",
+    layoutDirection: "up",
+    note: "事实-感受-需求-行动四步，适合做选择前梳理。"
+  },
+  relation: {
+    name: "关系对话",
+    modeId: "mirror",
+    deckTypeId: "pair",
+    layoutDirection: "right",
+    note: "看见我/对方/连接桥梁，适合双人关系议题。"
+  },
+  strategy: {
+    name: "推进策略",
+    modeId: "strategy",
+    deckTypeId: "pair",
+    layoutDirection: "left",
+    note: "现状-资源-阻碍-突破-下一步，适合卡住时推进。"
+  }
+};
+
+const FACILITATOR_STAGES = [
+  {
+    id: "description",
+    name: "描述阶段",
+    duration: "2-4 分钟",
+    cue: "先说“看到什么”，不解释对错。把形状、动作、关系拆开说。"
+  },
+  {
+    id: "association",
+    name: "联想阶段",
+    duration: "3-5 分钟",
+    cue: "把牌面连接到现实事件，尽量说具体人、具体场景。"
+  },
+  {
+    id: "inquiry",
+    name: "探究阶段",
+    duration: "3-5 分钟",
+    cue: "辨认感受与需求，不急着得结论，先问“我现在最需要什么？”"
+  },
+  {
+    id: "action",
+    name: "行动阶段",
+    duration: "2-3 分钟",
+    cue: "收束为 72 小时内可执行的一步，越小越好，越具体越好。"
+  }
+];
+
+const EMOTION_LABELS = {
+  1: "1 · 很低",
+  2: "2 · 偏低",
+  3: "3 · 中等",
+  4: "4 · 偏高",
+  5: "5 · 很高"
+};
+
+const HIGH_RISK_PATTERN =
+  /(自杀|自残|不想活|活不下去|伤害自己|伤害他人|绝望到极点|想结束生命|suicide|kill myself|harm myself|self-harm)/i;
+
 const ROTATION_CLASSES = ["rot-0", "rot-90", "rot-180", "rot-270"];
 const COMPOSITE_BASE_RATIO = 1045 / 1312;
 
@@ -261,7 +330,8 @@ const CURRENT_SESSION_STORAGE_KEY = "oh-card-current-session-v1";
 const SLOT_TEMPLATE_STORAGE_KEY = "oh-card-slot-template-v1";
 const UI_PREF_STORAGE_KEY = "oh-card-ui-pref-v1";
 const CLOUD_SYNC_STORAGE_KEY = "oh-card-cloud-sync-v1";
-const APP_ASSET_VERSION = "20260309-14";
+const SESSION_PROTOCOL_STORAGE_KEY = "oh-card-session-protocol-v1";
+const APP_ASSET_VERSION = "20260311-15";
 const BUNDLED_IMAGE_DECK_PATH = `./data/oh-image-deck.json?rev=${APP_ASSET_VERSION}`;
 const BUNDLED_WORD_DECK_PATH = `./data/oh-word-deck.json?rev=${APP_ASSET_VERSION}`;
 
@@ -273,9 +343,16 @@ const DEFAULT_OVERLAY_TUNE = {
 };
 
 const refs = {
+  sessionIntentInput: document.getElementById("sessionIntentInput"),
+  consentCheckbox: document.getElementById("consentCheckbox"),
+  pauseProtocolBtn: document.getElementById("pauseProtocolBtn"),
+  emotionIntensityInput: document.getElementById("emotionIntensityInput"),
+  emotionIntensityValue: document.getElementById("emotionIntensityValue"),
+  safetyAlert: document.getElementById("safetyAlert"),
   questionInput: document.getElementById("questionInput"),
   modeBadge: document.getElementById("modeBadge"),
   modeSwitch: document.getElementById("modeSwitch"),
+  presetSwitch: document.getElementById("presetSwitch"),
   workflowSteps: document.getElementById("workflowSteps"),
   deckTypeSwitch: document.getElementById("deckTypeSwitch"),
   layoutDirectionSwitch: document.getElementById("layoutDirectionSwitch"),
@@ -307,6 +384,10 @@ const refs = {
   promptTabs: document.getElementById("promptTabs"),
   promptHint: document.getElementById("promptHint"),
   promptList: document.getElementById("promptList"),
+  facilitatorToggleBtn: document.getElementById("facilitatorToggleBtn"),
+  facilitatorStatus: document.getElementById("facilitatorStatus"),
+  facilitatorChecklist: document.getElementById("facilitatorChecklist"),
+  facilitatorNextBtn: document.getElementById("facilitatorNextBtn"),
   regenPromptBtn: document.getElementById("regenPromptBtn"),
   copyReportBtn: document.getElementById("copyReportBtn"),
   noteInput: document.getElementById("noteInput"),
@@ -320,6 +401,11 @@ const refs = {
   autoSummaryText: document.getElementById("autoSummaryText"),
   actionChecklist: document.getElementById("actionChecklist"),
   actionStats: document.getElementById("actionStats"),
+  generateClosureBtn: document.getElementById("generateClosureBtn"),
+  copyClosureBtn: document.getElementById("copyClosureBtn"),
+  closureSummary: document.getElementById("closureSummary"),
+  closureAction: document.getElementById("closureAction"),
+  closureSupport: document.getElementById("closureSupport"),
   historyList: document.getElementById("historyList"),
   historySearchInput: document.getElementById("historySearchInput"),
   historyTagFilter: document.getElementById("historyTagFilter"),
@@ -353,6 +439,7 @@ const refs = {
   analyticsTopWords: document.getElementById("analyticsTopWords"),
   analyticsEmotionTrend: document.getElementById("analyticsEmotionTrend"),
   analyticsActionRate: document.getElementById("analyticsActionRate"),
+  analyticsSessionQuality: document.getElementById("analyticsSessionQuality"),
   imagePreviewModal: document.getElementById("imagePreviewModal"),
   previewCloseBtn: document.getElementById("previewCloseBtn"),
   previewImage: document.getElementById("previewImage"),
@@ -386,10 +473,21 @@ const state = {
   readonlyMode: false,
   customSlotLabels: loadCustomSlotLabels(),
   cloudSync: loadCloudSyncConfig(),
+  protocol: loadSessionProtocol(),
   drawVersion: 0,
   isDrawing: false,
+  layerVisits: new Set(),
+  facilitator: {
+    enabled: false,
+    stageIndex: 0
+  },
   currentCards: [],
   currentSession: null,
+  closure: {
+    summary: "",
+    action: "",
+    support: ""
+  },
   history: loadHistory(),
   wordDeck: cloneCards(DEFAULT_WORD_DECK),
   imageDeck: cloneCards(DEFAULT_IMAGE_DECK),
@@ -428,6 +526,8 @@ function init() {
   hydrateOverlayTune();
   hydrateUiPreference();
   hydrateCloudSyncInputs();
+  renderSessionProtocol();
+  renderPresetSwitch();
   renderModeSwitch();
   renderModeDetail();
   renderDeckTypeSwitch();
@@ -435,6 +535,7 @@ function init() {
   renderDeckStatus();
   renderOverlayTuneControls();
   renderPromptTabs();
+  renderFacilitatorPanel();
   renderPlaybook();
   renderHistory();
   refs.historySearchInput.value = state.historyQuery;
@@ -447,6 +548,8 @@ function init() {
   renderFocusView();
   renderCloudSyncStatus();
   renderAnalytics();
+  renderClosurePanel();
+  detectSafetyRisk();
   applyOverlayTuneToElement(refs.previewPairComposite);
   setSummary("已启用图卡 + 字卡玩法。你可以直接抽，也可以先导入自己的卡组。", false);
   const hasReadonlyShared = hydrateReadonlySessionFromHash();
@@ -464,12 +567,48 @@ function init() {
 }
 
 function bindEvents() {
+  refs.sessionIntentInput.addEventListener("input", () => {
+    state.protocol.intent = refs.sessionIntentInput.value.trim();
+    persistSessionProtocol();
+    if (state.currentSession) {
+      syncCurrentSessionToHistory();
+    }
+    renderClosurePanel();
+  });
+  refs.consentCheckbox.addEventListener("change", () => {
+    state.protocol.consent = refs.consentCheckbox.checked;
+    persistSessionProtocol();
+    if (state.currentSession) {
+      syncCurrentSessionToHistory();
+    }
+    renderSessionProtocol();
+    renderWorkflowSteps();
+  });
+  refs.pauseProtocolBtn.addEventListener("click", () => {
+    state.protocol.paused = !state.protocol.paused;
+    persistSessionProtocol();
+    renderSessionProtocol();
+    setSummary(state.protocol.paused ? "已进入暂停模式。你可以先呼吸、喝水、稍后继续。" : "已恢复探索模式。", false);
+  });
+  refs.emotionIntensityInput.addEventListener("input", () => {
+    state.protocol.emotion = Math.max(1, Math.min(5, Number(refs.emotionIntensityInput.value) || 3));
+    persistSessionProtocol();
+    if (state.currentSession) {
+      syncCurrentSessionToHistory();
+    }
+    renderSessionProtocol();
+    renderClosurePanel();
+    detectSafetyRisk();
+  });
+
   refs.questionInput.addEventListener("input", () => {
     if (state.currentSession) {
       state.currentSession.question = refs.questionInput.value.trim();
       syncCurrentSessionToHistory();
     }
     persistCurrentSessionSnapshot();
+    detectSafetyRisk();
+    renderSessionProtocol();
     renderWorkflowSteps();
   });
 
@@ -479,6 +618,14 @@ function bindEvents() {
       return;
     }
     setMode(button.dataset.mode);
+  });
+
+  refs.presetSwitch.addEventListener("click", (event) => {
+    const button = event.target.closest("button[data-preset]");
+    if (!button) {
+      return;
+    }
+    applySessionPreset(button.dataset.preset);
   });
 
   refs.deckTypeSwitch.addEventListener("click", (event) => {
@@ -503,7 +650,11 @@ function bindEvents() {
       return;
     }
     state.layerId = button.dataset.layer;
+    markLayerVisited(state.layerId);
+    syncFacilitatorStageByLayer(state.layerId);
     renderPromptTabs();
+    renderFacilitatorPanel();
+    renderClosurePanel();
     renderPrompts();
   });
 
@@ -517,6 +668,8 @@ function bindEvents() {
   });
   refs.noteInput.addEventListener("input", () => {
     persistCurrentSessionSnapshot();
+    detectSafetyRisk();
+    renderClosurePanel();
     renderWorkflowSteps();
   });
   refs.exportPngBtn.addEventListener("click", () => exportSessionAsset("png"));
@@ -527,6 +680,8 @@ function bindEvents() {
   refs.exportHomeworkBtn.addEventListener("click", () => exportSessionAsset("homework"));
   refs.regenActionPlanBtn.addEventListener("click", regenerateActionPlan);
   refs.actionChecklist.addEventListener("change", handleActionChecklistChange);
+  refs.generateClosureBtn.addEventListener("click", generateClosureIntegration);
+  refs.copyClosureBtn.addEventListener("click", copyClosureIntegration);
   refs.copyReportBtn.addEventListener("click", copyCurrentReport);
   refs.clearHistoryBtn.addEventListener("click", clearHistory);
   refs.historyList.addEventListener("click", handleHistoryAction);
@@ -593,6 +748,12 @@ function bindEvents() {
   refs.syncCodeExportBtn.addEventListener("click", exportSyncCode);
   refs.syncCodeImportBtn.addEventListener("click", importSyncCode);
   setupDeckDropzone();
+  refs.facilitatorToggleBtn.addEventListener("click", () => {
+    toggleFacilitatorMode();
+  });
+  refs.facilitatorNextBtn.addEventListener("click", () => {
+    advanceFacilitatorStage();
+  });
 
   refs.previewCloseBtn.addEventListener("click", closeImagePreview);
   refs.previewFitToggleBtn.addEventListener("click", () => {
@@ -653,6 +814,180 @@ function bindEvents() {
   });
 }
 
+function renderSessionProtocol() {
+  refs.sessionIntentInput.value = state.protocol.intent || "";
+  refs.consentCheckbox.checked = Boolean(state.protocol.consent);
+  refs.emotionIntensityInput.value = String(state.protocol.emotion || 3);
+  refs.emotionIntensityValue.textContent = EMOTION_LABELS[state.protocol.emotion] || EMOTION_LABELS[3];
+  refs.pauseProtocolBtn.textContent = state.protocol.paused ? "恢复模式" : "暂停模式";
+  refs.drawBtn.disabled = state.protocol.paused;
+}
+
+function detectSafetyRisk() {
+  const text = `${refs.questionInput.value} ${refs.noteInput.value} ${state.protocol.intent || ""}`.trim();
+  const highRiskByWords = HIGH_RISK_PATTERN.test(text);
+  const highRiskByIntensity = Number(state.protocol.emotion || 3) >= 5;
+  const isHighRisk = highRiskByWords || highRiskByIntensity;
+  if (!isHighRisk) {
+    refs.safetyAlert.hidden = true;
+    refs.safetyAlert.textContent = "";
+    return;
+  }
+  refs.safetyAlert.hidden = false;
+  refs.safetyAlert.textContent =
+    "当前议题强度较高。建议先暂停抽卡，做 3 次深呼吸；若出现伤害自己/他人的冲动，请立即联系当地急救电话或可信赖的专业支持。";
+}
+
+function renderPresetSwitch() {
+  refs.presetSwitch.innerHTML = "";
+  Object.entries(SESSION_PRESETS).forEach(([presetId, preset]) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "preset-btn";
+    button.dataset.preset = presetId;
+    button.innerHTML = `<strong>${preset.name}</strong><span>${preset.note}</span>`;
+    refs.presetSwitch.appendChild(button);
+  });
+}
+
+function applySessionPreset(presetId) {
+  if (state.readonlyMode) {
+    setSummary("只读分享模式下不能切换预设。", true);
+    return;
+  }
+  const preset = SESSION_PRESETS[presetId];
+  if (!preset) {
+    return;
+  }
+  state.modeId = preset.modeId;
+  state.deckTypeId = preset.deckTypeId;
+  state.layoutDirection = preset.layoutDirection;
+  state.layerId = "description";
+  resetLayerVisits();
+  markLayerVisited("description");
+  state.facilitator.stageIndex = 0;
+
+  if (state.currentCards.length > 0) {
+    state.currentCards = [];
+    state.currentSession = null;
+    refs.spreadBoard.className = "spread-board empty";
+    refs.spreadBoard.innerHTML = '<p class="placeholder">预设已切换，请重新抽卡开始新一局。</p>';
+    refs.promptList.innerHTML = "";
+    const promptItem = document.createElement("li");
+    promptItem.textContent = "已切换玩法预设，请重新抽卡。";
+    refs.promptList.appendChild(promptItem);
+    renderActionPlan();
+  }
+
+  renderModeSwitch();
+  renderModeDetail();
+  renderDeckTypeSwitch();
+  renderLayoutDirectionSwitch();
+  renderPromptTabs();
+  renderSlotEditor();
+  renderFacilitatorPanel();
+  renderClosurePanel();
+  renderWorkflowSteps();
+  persistCurrentSessionSnapshot();
+  setSummary(`已应用预设：${preset.name}`, false);
+}
+
+function getFacilitatorLayer(stage) {
+  if (!stage) {
+    return "description";
+  }
+  if (stage.id === "action") {
+    return "inquiry";
+  }
+  return stage.id;
+}
+
+function getFacilitatorStageIndexByLayer(layerId) {
+  const index = FACILITATOR_STAGES.findIndex((stage) => getFacilitatorLayer(stage) === layerId);
+  return index >= 0 ? index : 0;
+}
+
+function syncFacilitatorStageByLayer(layerId) {
+  const stageIndex = getFacilitatorStageIndexByLayer(layerId);
+  if (stageIndex > state.facilitator.stageIndex) {
+    state.facilitator.stageIndex = stageIndex;
+  }
+}
+
+function toggleFacilitatorMode(force) {
+  const next = typeof force === "boolean" ? force : !state.facilitator.enabled;
+  state.facilitator.enabled = next;
+  if (next) {
+    state.facilitator.stageIndex = getFacilitatorStageIndexByLayer(state.layerId);
+  }
+  renderModeSwitch();
+  renderFacilitatorPanel();
+  setSummary(next ? "已开启主持人模式。建议按阶段推进，不急于下结论。" : "已关闭主持人模式。", false);
+}
+
+function advanceFacilitatorStage() {
+  if (!state.facilitator.enabled) {
+    toggleFacilitatorMode(true);
+  }
+  const current = Math.max(0, Math.min(FACILITATOR_STAGES.length - 1, state.facilitator.stageIndex));
+  const next = Math.min(FACILITATOR_STAGES.length - 1, current + 1);
+  state.facilitator.stageIndex = next;
+  const stage = FACILITATOR_STAGES[next];
+  const layerId = getFacilitatorLayer(stage);
+  if (layerId in PROMPT_POOL) {
+    state.layerId = layerId;
+    markLayerVisited(layerId);
+    renderPromptTabs();
+    renderPrompts();
+  }
+  renderModeSwitch();
+  renderFacilitatorPanel();
+  renderClosurePanel();
+  if (stage.id === "action") {
+    generateClosureIntegration();
+  }
+  setSummary(`已进入：${stage.name}`, false);
+}
+
+function renderFacilitatorPanel() {
+  refs.facilitatorToggleBtn.textContent = state.facilitator.enabled ? "关闭" : "开启";
+  refs.facilitatorChecklist.innerHTML = "";
+  FACILITATOR_STAGES.forEach((stage, index) => {
+    const row = document.createElement("li");
+    const isCurrent = state.facilitator.enabled && index === state.facilitator.stageIndex;
+    const isDone = state.facilitator.enabled && index < state.facilitator.stageIndex;
+    row.className = `facilitator-item${isCurrent ? " is-current" : ""}${isDone ? " is-done" : ""}`;
+    row.innerHTML = `<strong>${stage.name}</strong><span>${stage.duration} · ${stage.cue}</span>`;
+    refs.facilitatorChecklist.appendChild(row);
+  });
+  const stage = FACILITATOR_STAGES[state.facilitator.stageIndex] || FACILITATOR_STAGES[0];
+  refs.facilitatorStatus.textContent = state.facilitator.enabled
+    ? `当前阶段：${stage.name}（${stage.duration}）。提示：${stage.cue}`
+    : "未开启。开启后会按「描述 -> 联想 -> 探究 -> 行动」分阶段推进。";
+  const atLastStage = state.facilitator.stageIndex >= FACILITATOR_STAGES.length - 1;
+  refs.facilitatorNextBtn.disabled = !state.facilitator.enabled;
+  refs.facilitatorNextBtn.textContent = atLastStage ? "已到行动阶段" : "下一阶段";
+}
+
+function markLayerVisited(layerId) {
+  if (!layerId) {
+    return;
+  }
+  state.layerVisits.add(layerId);
+  if (state.currentSession) {
+    state.currentSession.layerVisits = Array.from(state.layerVisits);
+    syncCurrentSessionToHistory();
+  }
+}
+
+function resetLayerVisits() {
+  state.layerVisits = new Set();
+}
+
+function getLayerVisitArray() {
+  return Array.from(state.layerVisits);
+}
+
 function renderModeSwitch() {
   refs.modeSwitch.innerHTML = "";
   Object.entries(MODES).forEach(([modeId, mode]) => {
@@ -663,7 +998,8 @@ function renderModeSwitch() {
     button.innerHTML = `<strong>${mode.name}</strong><span>${mode.description}</span>`;
     refs.modeSwitch.appendChild(button);
   });
-  refs.modeBadge.textContent = `${MODES[state.modeId].badge} / ${DECK_TYPES[state.deckTypeId].name} / ${LAYOUT_DIRECTIONS[state.layoutDirection].name}`;
+  const stage = state.facilitator.enabled ? FACILITATOR_STAGES[state.facilitator.stageIndex]?.name || "主持中" : "自由探索";
+  refs.modeBadge.textContent = `${MODES[state.modeId].badge} / ${DECK_TYPES[state.deckTypeId].name} / ${LAYOUT_DIRECTIONS[state.layoutDirection].name} / ${stage}`;
 }
 
 function renderDeckTypeSwitch() {
@@ -703,7 +1039,7 @@ function renderDeckStatus() {
 
 function renderWorkflowSteps() {
   refs.workflowSteps.innerHTML = "";
-  const hasQuestion = refs.questionInput.value.trim().length > 0;
+  const hasQuestion = refs.questionInput.value.trim().length > 0 && Boolean(state.protocol.consent);
   const hasDraw = state.currentCards.length > 0;
   const hasGuide = hasDraw && refs.promptList.querySelector("li");
   const hasMainNote = refs.noteInput.value.trim().length > 0 || Boolean(state.currentSession?.note);
@@ -818,6 +1154,7 @@ function handleActionChecklistChange(event) {
   }
   syncCurrentSessionToHistory();
   renderActionPlan();
+  generateClosureIntegration(true);
 }
 
 function regenerateActionPlan() {
@@ -834,6 +1171,7 @@ function regenerateActionPlan() {
   );
   syncCurrentSessionToHistory();
   renderActionPlan();
+  generateClosureIntegration(true);
   setSummary("已重新生成复盘总结与行动建议。", false);
 }
 
@@ -972,6 +1310,97 @@ function buildActionPlan(cards, question, note, mode) {
       }
     ]
   };
+}
+
+function generateClosureIntegration(silent = false) {
+  if (state.currentCards.length === 0) {
+    if (!silent) {
+      setSummary("请先抽卡，再生成结束整合。", true);
+    }
+    return;
+  }
+  const mode = MODES[state.modeId];
+  const question = refs.questionInput.value.trim();
+  const note = refs.noteInput.value.trim();
+  const names = state.currentCards.slice(0, 3).map((card) => getCardShortName(card));
+  const anchor = names[0] || "当前牌面";
+  const intent = state.protocol.intent ? `围绕“${state.protocol.intent}”` : "围绕当前议题";
+  const summary = `${intent}，你在「${mode.name}」里看到「${names.join(" / ")}」，本轮最值得保留的核心线索是「${anchor}」。`;
+  const plan = normalizeActionPlan(state.currentSession?.actionPlan);
+  const nextAction = plan.actions.find((item) => !item.done) || plan.actions[0];
+  const action = nextAction
+    ? `72 小时行动：${nextAction.text}${nextAction.dueDate ? `（截止 ${nextAction.dueDate}）` : ""}`
+    : "72 小时行动：选择一个最小动作，并在今天写下具体时间点。";
+  const highRisk = HIGH_RISK_PATTERN.test(`${question} ${note} ${state.protocol.intent || ""}`) || Number(state.protocol.emotion || 3) >= 5;
+  const support = highRisk
+    ? "支持提醒：当前强度较高，请优先稳定身心；若出现伤害自己/他人的冲动，请立即联系当地急救或专业支持。"
+    : "支持提醒：如果执行动作时卡住，先降低目标难度，再约一位可信赖的人做外部见证。";
+  state.closure = { summary, action, support };
+  if (state.currentSession) {
+    state.currentSession.closure = { ...state.closure };
+    syncCurrentSessionToHistory();
+  }
+  renderClosurePanel();
+  if (!silent) {
+    setSummary("已生成结束整合。", false);
+  }
+}
+
+function renderClosurePanel() {
+  const quality = computeSessionQuality();
+  refs.closureSummary.textContent = state.closure.summary || "完成抽卡后可生成一句话整合，帮助你收束本次探索。";
+  refs.closureAction.textContent = state.closure.action || "72 小时行动将从你的牌面与记录自动提炼。";
+  refs.closureSupport.textContent = `${state.closure.support || "支持提醒：高压状态下优先休息、联系可信赖的人或专业支持。"}（会话质量分：${quality}）`;
+}
+
+async function copyClosureIntegration() {
+  if (!state.closure.summary && !state.closure.action) {
+    generateClosureIntegration(true);
+  }
+  const payload = [state.closure.summary, state.closure.action, state.closure.support].filter(Boolean).join("\n");
+  if (!payload.trim()) {
+    setSummary("请先抽卡，再复制结束整合。", true);
+    return;
+  }
+  const copied = await copyText(payload);
+  setSummary(copied ? "已复制结束整合。" : "复制失败，请手动复制。", !copied);
+}
+
+function computeSessionQuality(session = null) {
+  const targetSession = session || state.currentSession || null;
+  const question = (targetSession?.question ?? refs.questionInput.value ?? "").trim();
+  const note = (targetSession?.note ?? refs.noteInput.value ?? "").trim();
+  const cards = Array.isArray(targetSession?.cards) ? targetSession.cards : state.currentCards;
+  const actionPlan = normalizeActionPlan(targetSession?.actionPlan);
+  const visitedLayers = Array.isArray(targetSession?.layerVisits)
+    ? targetSession.layerVisits
+    : getLayerVisitArray();
+  const layerSet = new Set((visitedLayers || []).filter((layer) => ["description", "association", "inquiry"].includes(layer)));
+  const doneCount = actionPlan.actions.filter((item) => item.done).length;
+  const hasDualNote = session
+    ? Boolean(targetSession?.dualNotes?.a || targetSession?.dualNotes?.b)
+    : Boolean(refs.dualNoteA.value.trim() || refs.dualNoteB.value.trim() || targetSession?.dualNotes?.a || targetSession?.dualNotes?.b);
+  const consentFlag = session
+    ? Boolean(targetSession?.protocol?.consent)
+    : Boolean(state.protocol.consent || targetSession?.protocol?.consent);
+  let score = 0;
+  if (consentFlag) {
+    score += 10;
+  }
+  if (question) {
+    score += 15;
+  }
+  if (Array.isArray(cards) && cards.length > 0) {
+    score += 20;
+  }
+  score += Math.min(3, layerSet.size) * 10;
+  if (note || hasDualNote) {
+    score += 15;
+  }
+  if (actionPlan.actions.length > 0) {
+    score += 10 + Math.round((doneCount / actionPlan.actions.length) * 10);
+  }
+  return Math.max(0, Math.min(100, score));
 }
 
 function offsetDateString(offsetDays) {
@@ -1121,6 +1550,14 @@ function runDraw() {
     setSummary("当前是只读分享模式，不能直接抽卡。请先退出只读模式。", true);
     return;
   }
+  if (state.protocol.paused) {
+    setSummary("当前处于暂停模式。点击“恢复模式”后再抽卡。", true);
+    return;
+  }
+  if (!state.protocol.consent) {
+    setSummary("请先在「开场协议」勾选探索同意项，再开始抽卡。", true);
+    return;
+  }
   if (state.isDrawing) {
     return;
   }
@@ -1132,6 +1569,9 @@ function runDraw() {
   }
 
   const cards = drawCards(mode.count);
+  resetLayerVisits();
+  markLayerVisited("description");
+  state.facilitator.stageIndex = 0;
   const drawToken = Date.now();
   state.drawVersion = drawToken;
   state.isDrawing = true;
@@ -1169,7 +1609,13 @@ function runDraw() {
       },
       lastExportAt: "",
       actionPlan: normalizeActionPlan(buildActionPlan(cards, refs.questionInput.value.trim(), refs.noteInput.value.trim(), mode)),
-      tags: inferSessionTags(refs.questionInput.value.trim(), "", cards)
+      tags: inferSessionTags(refs.questionInput.value.trim(), "", cards),
+      protocol: {
+        intent: state.protocol.intent || "",
+        consent: Boolean(state.protocol.consent),
+        emotion: Number(state.protocol.emotion || 3)
+      },
+      layerVisits: getLayerVisitArray()
     };
 
     state.currentSession = session;
@@ -1180,9 +1626,11 @@ function runDraw() {
       false
     );
     renderActionPlan();
+    generateClosureIntegration(true);
     renderWorkflowSteps();
     persistCurrentSessionSnapshot();
     renderAnalytics();
+    renderFacilitatorPanel();
     preloadCards(cards);
     preloadNextRoundCandidates(mode.count);
     refs.drawBtn.disabled = false;
@@ -1495,6 +1943,13 @@ function syncCurrentSessionToHistory() {
   if (!state.currentSession) {
     return;
   }
+  state.currentSession.layerVisits = getLayerVisitArray();
+  state.currentSession.closure = { ...state.closure };
+  state.currentSession.protocol = {
+    intent: state.protocol.intent || "",
+    consent: Boolean(state.protocol.consent),
+    emotion: Number(state.protocol.emotion || 3)
+  };
   state.history = state.history.map((entry) => {
     if (entry.id !== state.currentSession.id) {
       return entry;
@@ -1513,6 +1968,13 @@ function syncCurrentSessionToHistory() {
         b: refs.dualNoteB.value.trim()
       },
       actionPlan: normalizeActionPlan(state.currentSession.actionPlan),
+      closure: { ...state.closure },
+      layerVisits: getLayerVisitArray(),
+      protocol: {
+        intent: state.protocol.intent || "",
+        consent: Boolean(state.protocol.consent),
+        emotion: Number(state.protocol.emotion || 3)
+      },
       lastExportAt: state.currentSession.lastExportAt || "",
       tags: inferSessionTags(refs.questionInput.value.trim(), refs.noteInput.value.trim(), state.currentCards)
     };
@@ -1549,6 +2011,7 @@ function renderHistory() {
     const layoutDirection = LAYOUT_DIRECTIONS[session.layoutDirection] || LAYOUT_DIRECTIONS.up;
     const actionPlan = normalizeActionPlan(session.actionPlan);
     const doneCount = actionPlan.actions.filter((item) => item.done).length;
+    const quality = computeSessionQuality(session);
     const tags = Array.isArray(session.tags) ? session.tags : [];
     const tagHtml = tags.map((tag) => `<span>${escapeHTML(tagLabel(tag))}</span>`).join("");
 
@@ -1564,6 +2027,7 @@ function renderHistory() {
       <p>笔记：${escapeHTML(session.note || "（未记录）")}</p>
       <p>双人模式：${session.dualMode ? "开启" : "关闭"}</p>
       <p>行动进度：${doneCount}/3</p>
+      <p>质量分：${quality}</p>
       <p class="history-tag">${tagHtml || "<span>未分类</span>"}</p>
       <div class="actions compact">
         <button class="btn btn-ghost" data-action="replay" data-id="${escapeHTML(session.id)}">回看此局</button>
@@ -1611,7 +2075,10 @@ function handleHistoryAction(event) {
     if (state.currentSession && state.currentSession.id === id) {
       state.currentSession = null;
       state.currentCards = [];
+      state.closure = { summary: "", action: "", support: "" };
+      resetLayerVisits();
       renderActionPlan();
+      renderClosurePanel();
     }
     persistHistory();
     renderHistory();
@@ -1650,12 +2117,30 @@ function handleHistoryAction(event) {
       : { a: "", b: "" };
     state.currentSession = session;
     state.currentCards = session.cards || [];
+    if (session.protocol && typeof session.protocol === "object") {
+      state.protocol = {
+        intent: typeof session.protocol.intent === "string" ? session.protocol.intent : state.protocol.intent,
+        consent: Boolean(session.protocol.consent),
+        emotion: Math.max(1, Math.min(5, Number(session.protocol.emotion) || 3)),
+        paused: false
+      };
+    }
+    state.closure = session.closure && typeof session.closure === "object"
+      ? {
+          summary: typeof session.closure.summary === "string" ? session.closure.summary : "",
+          action: typeof session.closure.action === "string" ? session.closure.action : "",
+          support: typeof session.closure.support === "string" ? session.closure.support : ""
+        }
+      : { summary: "", action: "", support: "" };
+    state.layerVisits = new Set(Array.isArray(session.layerVisits) ? session.layerVisits : []);
     state.layerId = "description";
+    state.facilitator.stageIndex = getFacilitatorStageIndexByLayer(state.layerId);
     refs.questionInput.value = session.question || "";
     refs.noteInput.value = session.note || "";
     state.dualMode = session.dualMode;
     refs.dualNoteA.value = session.dualNotes.a;
     refs.dualNoteB.value = session.dualNotes.b;
+    renderSessionProtocol();
     renderModeSwitch();
     renderModeDetail();
     renderDualModePanel();
@@ -1666,6 +2151,7 @@ function handleHistoryAction(event) {
     renderSpread(state.currentCards, session.slotLabels);
     renderPrompts(session.slotLabels);
     renderActionPlan();
+    renderClosurePanel();
     renderWorkflowSteps();
     persistCurrentSessionSnapshot();
     setSummary(
@@ -1688,6 +2174,7 @@ function saveCurrentNote() {
   state.currentSession.note = noteText;
   syncCurrentSessionToHistory();
   renderHistory();
+  generateClosureIntegration(true);
   renderWorkflowSteps();
   setSummary("本次记录已保存到浏览器本地。", false);
 }
@@ -1700,8 +2187,12 @@ async function copyCurrentReport() {
   const mode = MODES[state.modeId];
   const promptItems = Array.from(refs.promptList.querySelectorAll("li")).map((item) => item.textContent || "");
   const actionPlan = normalizeActionPlan(state.currentSession?.actionPlan);
+  generateClosureIntegration(true);
   const report = [
     "【OH 卡引导记录】",
+    `开场意图：${state.protocol.intent || "（未填写）"}`,
+    `探索同意：${state.protocol.consent ? "已确认" : "未确认"}`,
+    `情绪强度：${EMOTION_LABELS[state.protocol.emotion] || "3 · 中等"}`,
     `问题：${refs.questionInput.value.trim() || "（未填写）"}`,
     `玩法：${mode.name}`,
     `卡组：${DECK_TYPES[state.deckTypeId].name}`,
@@ -1718,6 +2209,11 @@ async function copyCurrentReport() {
       const duePart = item.dueDate ? `（截止 ${item.dueDate} / ${reminderLabel(item.reminder)}）` : "";
       return `- [${item.done ? "x" : " "}] ${index + 1}. ${item.text}${duePart}`;
     }),
+    "结束整合：",
+    state.closure.summary || "（未生成）",
+    state.closure.action || "（未生成）",
+    state.closure.support || "（未生成）",
+    `会话质量分：${computeSessionQuality()}`,
     `笔记：${refs.noteInput.value.trim() || "（未填写）"}`,
     ...(state.dualMode
       ? [`A 方记录：${refs.dualNoteA.value.trim() || "（未填写）"}`, `B 方记录：${refs.dualNoteB.value.trim() || "（未填写）"}`]
@@ -1737,6 +2233,8 @@ function buildConsultReportText() {
     "# OH 咨询报告版",
     "",
     `- 时间：${new Date().toLocaleString()}`,
+    `- 开场意图：${state.protocol.intent || "（未填写）"}`,
+    `- 情绪强度：${EMOTION_LABELS[state.protocol.emotion] || "3 · 中等"}`,
     `- 议题：${refs.questionInput.value.trim() || "（未填写）"}`,
     `- 玩法：${mode.name} / ${DECK_TYPES[state.deckTypeId].name}`,
     "",
@@ -1749,6 +2247,11 @@ function buildConsultReportText() {
     "## 结论与行动",
     `- 总结：${actionPlan.summary}`,
     ...actionPlan.actions.map((item, index) => `- ${index + 1}. ${item.text}（${item.dueDate || "未设截止"} / ${reminderLabel(item.reminder)}）`),
+    "",
+    "## 结束整合",
+    state.closure.summary || "（未生成）",
+    state.closure.action || "（未生成）",
+    state.closure.support || "（未生成）",
     "",
     "## 记录",
     refs.noteInput.value.trim() || "（未填写）"
@@ -1799,6 +2302,9 @@ function resetBoard() {
   }
   state.currentCards = [];
   state.currentSession = null;
+  state.closure = { summary: "", action: "", support: "" };
+  resetLayerVisits();
+  state.facilitator.stageIndex = 0;
   refs.noteInput.value = "";
   refs.dualNoteA.value = "";
   refs.dualNoteB.value = "";
@@ -1809,7 +2315,10 @@ function resetBoard() {
   promptItem.textContent = "你已重置牌面。可先输入问题，再开始抽卡。";
   refs.promptList.appendChild(promptItem);
   renderActionPlan();
+  renderFacilitatorPanel();
+  renderClosurePanel();
   renderWorkflowSteps();
+  detectSafetyRisk();
   persistCurrentSessionSnapshot();
   setSummary("牌组已重置，准备开始新一局。", false);
 }
@@ -1849,6 +2358,8 @@ function setMode(modeId) {
   } else if (state.currentCards.length > 0) {
     state.currentCards = [];
     state.currentSession = null;
+    state.closure = { summary: "", action: "", support: "" };
+    resetLayerVisits();
     refs.spreadBoard.className = "spread-board empty";
     refs.spreadBoard.innerHTML = '<p class="placeholder">玩法已切换，请重新抽卡以匹配新的牌阵结构。</p>';
     refs.promptList.innerHTML = "";
@@ -1857,6 +2368,9 @@ function setMode(modeId) {
     refs.promptList.appendChild(promptItem);
     renderActionPlan();
   }
+  syncFacilitatorStageByLayer(state.layerId);
+  renderFacilitatorPanel();
+  renderClosurePanel();
   renderWorkflowSteps();
   persistCurrentSessionSnapshot();
   setSummary(`已切换玩法：${MODES[modeId].name}`, false);
@@ -1877,6 +2391,8 @@ function setDeckType(deckTypeId) {
   if (state.currentCards.length > 0) {
     state.currentCards = [];
     state.currentSession = null;
+    state.closure = { summary: "", action: "", support: "" };
+    resetLayerVisits();
     refs.spreadBoard.className = "spread-board empty";
     refs.spreadBoard.innerHTML = '<p class="placeholder">卡组模式已切换，请重新抽卡。</p>';
     refs.promptList.innerHTML = "";
@@ -1886,6 +2402,8 @@ function setDeckType(deckTypeId) {
     renderActionPlan();
   }
 
+  renderFacilitatorPanel();
+  renderClosurePanel();
   renderWorkflowSteps();
   persistCurrentSessionSnapshot();
   setSummary(`已切换卡组：${DECK_TYPES[deckTypeId].name}`, false);
@@ -1924,6 +2442,8 @@ function setLayoutDirection(directionId) {
     renderPrompts(slotLabels);
   }
 
+  renderFacilitatorPanel();
+  renderClosurePanel();
   renderWorkflowSteps();
   persistCurrentSessionSnapshot();
   setSummary(`已切换方向：${LAYOUT_DIRECTIONS[directionId].name}`, false);
@@ -4427,6 +4947,23 @@ function normalizeHistoryEntries(entries) {
             }
           : { a: "", b: "" },
         actionPlan: normalizeActionPlan(entry.actionPlan),
+        closure: entry.closure && typeof entry.closure === "object"
+          ? {
+              summary: typeof entry.closure.summary === "string" ? entry.closure.summary : "",
+              action: typeof entry.closure.action === "string" ? entry.closure.action : "",
+              support: typeof entry.closure.support === "string" ? entry.closure.support : ""
+            }
+          : { summary: "", action: "", support: "" },
+        layerVisits: Array.isArray(entry.layerVisits)
+          ? entry.layerVisits.filter((layer) => ["description", "association", "inquiry"].includes(layer))
+          : [],
+        protocol: entry.protocol && typeof entry.protocol === "object"
+          ? {
+              intent: typeof entry.protocol.intent === "string" ? entry.protocol.intent : "",
+              consent: Boolean(entry.protocol.consent),
+              emotion: Math.max(1, Math.min(5, Number(entry.protocol.emotion) || 3))
+            }
+          : { intent: "", consent: false, emotion: 3 },
         tags: Array.isArray(entry.tags) ? entry.tags : inferSessionTags(question, note, entry.cards || []),
         lastExportAt: typeof entry.lastExportAt === "string" ? entry.lastExportAt : ""
       };
@@ -4500,6 +5037,39 @@ function loadCloudSyncConfig() {
   }
 }
 
+function loadSessionProtocol() {
+  try {
+    const raw = localStorage.getItem(SESSION_PROTOCOL_STORAGE_KEY);
+    if (!raw) {
+      return { intent: "", consent: false, emotion: 3, paused: false };
+    }
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== "object") {
+      return { intent: "", consent: false, emotion: 3, paused: false };
+    }
+    return {
+      intent: typeof parsed.intent === "string" ? parsed.intent.trim() : "",
+      consent: Boolean(parsed.consent),
+      emotion: Math.max(1, Math.min(5, Number(parsed.emotion) || 3)),
+      paused: Boolean(parsed.paused)
+    };
+  } catch (error) {
+    return { intent: "", consent: false, emotion: 3, paused: false };
+  }
+}
+
+function persistSessionProtocol() {
+  localStorage.setItem(
+    SESSION_PROTOCOL_STORAGE_KEY,
+    JSON.stringify({
+      intent: state.protocol.intent || "",
+      consent: Boolean(state.protocol.consent),
+      emotion: Math.max(1, Math.min(5, Number(state.protocol.emotion) || 3)),
+      paused: Boolean(state.protocol.paused)
+    })
+  );
+}
+
 function hydrateCloudSyncInputs() {
   refs.cloudEndpointInput.value = state.cloudSync.endpoint || "";
   refs.cloudTokenInput.value = state.cloudSync.token || "";
@@ -4560,10 +5130,23 @@ function buildCurrentSessionSnapshot() {
       a: refs.dualNoteA.value.trim(),
       b: refs.dualNoteB.value.trim()
     },
+    protocol: {
+      intent: state.protocol.intent || "",
+      consent: Boolean(state.protocol.consent),
+      emotion: Number(state.protocol.emotion || 3),
+      paused: Boolean(state.protocol.paused)
+    },
     currentCards: state.currentCards,
     currentSession: {
       ...state.currentSession,
       slotLabels: getActiveSlotLabels(MODES[state.modeId]),
+      layerVisits: getLayerVisitArray(),
+      closure: { ...state.closure },
+      protocol: {
+        intent: state.protocol.intent || "",
+        consent: Boolean(state.protocol.consent),
+        emotion: Number(state.protocol.emotion || 3)
+      },
       dualMode: Boolean(state.dualMode),
       dualNotes: {
         a: refs.dualNoteA.value.trim(),
@@ -4600,6 +5183,14 @@ function hydrateCurrentSessionSnapshot() {
     state.deckTypeId = parsed.deckTypeId in DECK_TYPES ? parsed.deckTypeId : inferDeckTypeFromCards(parsed.currentCards || []);
     state.layoutDirection = parsed.layoutDirection in LAYOUT_DIRECTIONS ? parsed.layoutDirection : "up";
     state.layerId = parsed.layerId && parsed.layerId in PROMPT_POOL ? parsed.layerId : "description";
+    if (parsed.protocol && typeof parsed.protocol === "object") {
+      state.protocol = {
+        intent: typeof parsed.protocol.intent === "string" ? parsed.protocol.intent : state.protocol.intent,
+        consent: Boolean(parsed.protocol.consent),
+        emotion: Math.max(1, Math.min(5, Number(parsed.protocol.emotion) || 3)),
+        paused: Boolean(parsed.protocol.paused)
+      };
+    }
     state.currentCards = parsed.currentCards;
     state.currentSession = parsed.currentSession && typeof parsed.currentSession === "object"
       ? {
@@ -4614,7 +5205,17 @@ function hydrateCurrentSessionSnapshot() {
                 b: typeof parsed.currentSession.dualNotes.b === "string" ? parsed.currentSession.dualNotes.b : ""
               }
             : { a: "", b: "" },
-          actionPlan: normalizeActionPlan(parsed.currentSession.actionPlan)
+          actionPlan: normalizeActionPlan(parsed.currentSession.actionPlan),
+          closure: parsed.currentSession.closure && typeof parsed.currentSession.closure === "object"
+            ? {
+                summary: typeof parsed.currentSession.closure.summary === "string" ? parsed.currentSession.closure.summary : "",
+                action: typeof parsed.currentSession.closure.action === "string" ? parsed.currentSession.closure.action : "",
+                support: typeof parsed.currentSession.closure.support === "string" ? parsed.currentSession.closure.support : ""
+              }
+            : { summary: "", action: "", support: "" },
+          layerVisits: Array.isArray(parsed.currentSession.layerVisits)
+            ? parsed.currentSession.layerVisits.filter((layer) => ["description", "association", "inquiry"].includes(layer))
+            : []
         }
       : null;
     refs.questionInput.value = typeof parsed.question === "string" ? parsed.question : "";
@@ -4622,6 +5223,10 @@ function hydrateCurrentSessionSnapshot() {
     state.dualMode = Boolean(parsed.dualMode);
     refs.dualNoteA.value = typeof parsed.dualNotes?.a === "string" ? parsed.dualNotes.a : "";
     refs.dualNoteB.value = typeof parsed.dualNotes?.b === "string" ? parsed.dualNotes.b : "";
+    state.layerVisits = new Set(state.currentSession?.layerVisits || []);
+    state.closure = state.currentSession?.closure || { summary: "", action: "", support: "" };
+    state.facilitator.stageIndex = getFacilitatorStageIndexByLayer(state.layerId);
+    renderSessionProtocol();
     renderModeSwitch();
     renderModeDetail();
     renderDeckTypeSwitch();
@@ -4632,6 +5237,8 @@ function hydrateCurrentSessionSnapshot() {
     renderSpread(state.currentCards, state.currentSession?.slotLabels || getModeLabels(state.modeId, MODES[state.modeId].count));
     renderPrompts(state.currentSession?.slotLabels);
     renderActionPlan();
+    renderFacilitatorPanel();
+    renderClosurePanel();
     renderWorkflowSteps();
     setSummary("已恢复上次未完成局面。", false);
     return true;
@@ -4674,6 +5281,12 @@ function buildSyncPayload() {
     },
     overlayTune: state.overlayTune,
     customSlotLabels: state.customSlotLabels,
+    sessionProtocol: {
+      intent: state.protocol.intent || "",
+      consent: Boolean(state.protocol.consent),
+      emotion: Number(state.protocol.emotion || 3),
+      paused: false
+    },
     uiPreference: {
       dualMode: state.dualMode,
       focusView: state.focusView
@@ -4716,6 +5329,17 @@ function applySyncPayload(payload) {
     state.customSlotLabels = payload.customSlotLabels;
     persistCustomSlotLabels();
   }
+  if (payload.sessionProtocol && typeof payload.sessionProtocol === "object") {
+    state.protocol = {
+      intent: typeof payload.sessionProtocol.intent === "string" ? payload.sessionProtocol.intent.trim() : state.protocol.intent,
+      consent: Boolean(payload.sessionProtocol.consent),
+      emotion: Math.max(1, Math.min(5, Number(payload.sessionProtocol.emotion) || 3)),
+      paused: false
+    };
+    persistSessionProtocol();
+    renderSessionProtocol();
+    detectSafetyRisk();
+  }
   if (payload.uiPreference && typeof payload.uiPreference === "object") {
     state.dualMode = Boolean(payload.uiPreference.dualMode);
     state.focusView = Boolean(payload.uiPreference.focusView);
@@ -4730,6 +5354,8 @@ function applySyncPayload(payload) {
   renderSlotEditor();
   renderDualModePanel();
   renderFocusView();
+  renderFacilitatorPanel();
+  renderClosurePanel();
 }
 
 async function pushCloudSync() {
@@ -4818,11 +5444,18 @@ function buildReadonlySharePayload() {
     deckTypeId: state.deckTypeId,
     layoutDirection: state.layoutDirection,
     layerId: state.layerId,
+    protocol: {
+      intent: state.protocol.intent || "",
+      consent: Boolean(state.protocol.consent),
+      emotion: Number(state.protocol.emotion || 3)
+    },
     question: refs.questionInput.value.trim(),
     note: refs.noteInput.value.trim(),
     cards: state.currentCards,
     prompts: Array.from(refs.promptList.querySelectorAll("li")).map((item) => item.textContent || ""),
     slotLabels: getActiveSlotLabels(MODES[state.modeId]),
+    layerVisits: getLayerVisitArray(),
+    closure: { ...state.closure },
     dualMode: Boolean(state.dualMode),
     dualNotes: {
       a: refs.dualNoteA.value.trim(),
@@ -4871,6 +5504,20 @@ function hydrateReadonlySessionFromHash() {
     state.deckTypeId = payload.deckTypeId in DECK_TYPES ? payload.deckTypeId : inferDeckTypeFromCards(payload.cards || []);
     state.layoutDirection = payload.layoutDirection in LAYOUT_DIRECTIONS ? payload.layoutDirection : "up";
     state.layerId = payload.layerId in PROMPT_POOL ? payload.layerId : "description";
+    if (payload.protocol && typeof payload.protocol === "object") {
+      state.protocol = {
+        intent: typeof payload.protocol.intent === "string" ? payload.protocol.intent : "",
+        consent: Boolean(payload.protocol.consent),
+        emotion: Math.max(1, Math.min(5, Number(payload.protocol.emotion) || 3)),
+        paused: false
+      };
+    }
+    resetLayerVisits();
+    (Array.isArray(payload.layerVisits) ? payload.layerVisits : [state.layerId]).forEach((layer) => {
+      if (layer in PROMPT_POOL) {
+        markLayerVisited(layer);
+      }
+    });
     state.currentCards = payload.cards;
     state.dualMode = Boolean(payload.dualMode);
     refs.questionInput.value = typeof payload.question === "string" ? payload.question : "";
@@ -4894,8 +5541,28 @@ function hydrateReadonlySessionFromHash() {
       },
       lastExportAt: "",
       actionPlan: normalizeActionPlan(buildActionPlan(state.currentCards, refs.questionInput.value.trim(), refs.noteInput.value.trim(), MODES[state.modeId])),
-      tags: inferSessionTags(refs.questionInput.value.trim(), refs.noteInput.value.trim(), state.currentCards)
+      tags: inferSessionTags(refs.questionInput.value.trim(), refs.noteInput.value.trim(), state.currentCards),
+      layerVisits: getLayerVisitArray(),
+      closure: payload.closure && typeof payload.closure === "object"
+        ? {
+            summary: typeof payload.closure.summary === "string" ? payload.closure.summary : "",
+            action: typeof payload.closure.action === "string" ? payload.closure.action : "",
+            support: typeof payload.closure.support === "string" ? payload.closure.support : ""
+          }
+        : { summary: "", action: "", support: "" },
+      protocol: {
+        intent: state.protocol.intent || "",
+        consent: Boolean(state.protocol.consent),
+        emotion: Number(state.protocol.emotion || 3)
+      }
     };
+    if (state.currentSession.closure.summary || state.currentSession.closure.action || state.currentSession.closure.support) {
+      state.closure = { ...state.currentSession.closure };
+    } else {
+      generateClosureIntegration(true);
+    }
+    state.facilitator.stageIndex = getFacilitatorStageIndexByLayer(state.layerId);
+    renderSessionProtocol();
     renderModeSwitch();
     renderModeDetail();
     renderDeckTypeSwitch();
@@ -4915,6 +5582,8 @@ function hydrateReadonlySessionFromHash() {
       renderPrompts(state.currentSession.slotLabels);
     }
     renderActionPlan();
+    renderFacilitatorPanel();
+    renderClosurePanel();
     renderWorkflowSteps();
     applyReadonlyModeState();
     setSummary("已进入只读分享模式。", false);
@@ -4931,6 +5600,12 @@ function applyReadonlyModeState() {
   document.body.classList.toggle("readonly-mode", state.readonlyMode);
   refs.readonlyBanner.hidden = !state.readonlyMode;
   const lockElements = [
+    refs.sessionIntentInput,
+    refs.consentCheckbox,
+    refs.pauseProtocolBtn,
+    refs.emotionIntensityInput,
+    refs.facilitatorToggleBtn,
+    refs.facilitatorNextBtn,
     refs.questionInput,
     refs.noteInput,
     refs.dualNoteA,
@@ -4940,6 +5615,7 @@ function applyReadonlyModeState() {
     refs.importImageDeckBtn,
     refs.importWordDeckBtn,
     refs.resetDeckBtn,
+    refs.generateClosureBtn,
     refs.saveNoteBtn,
     refs.clearHistoryBtn
   ];
@@ -4959,6 +5635,9 @@ function exitReadonlyMode() {
   if (!restored) {
     resetBoard();
   }
+  renderSessionProtocol();
+  renderFacilitatorPanel();
+  renderClosurePanel();
   setSummary("已退出只读分享模式。", false);
 }
 
@@ -4969,12 +5648,14 @@ function renderAnalytics() {
     refs.analyticsTopWords.innerHTML = "<span>暂无</span>";
     refs.analyticsEmotionTrend.innerHTML = "<span>暂无</span>";
     refs.analyticsActionRate.textContent = "0%";
+    refs.analyticsSessionQuality.textContent = "0";
     return;
   }
   const wordCount = new Map();
   const emotionCount = new Map();
   let doneTotal = 0;
   let actionTotal = 0;
+  let qualityTotal = 0;
   const emotionTerms = ["开心", "焦虑", "生气", "害怕", "难过", "轻松", "压力", "期待", "孤独", "感情"];
 
   entries.forEach((session) => {
@@ -4991,6 +5672,7 @@ function renderAnalytics() {
     const actions = normalizeActionPlan(session.actionPlan).actions;
     actionTotal += actions.length;
     doneTotal += actions.filter((item) => item.done).length;
+    qualityTotal += computeSessionQuality(session);
   });
 
   const topWords = Array.from(wordCount.entries())
@@ -5006,8 +5688,10 @@ function renderAnalytics() {
     ? topEmotions.map(([word, count]) => `<span>${escapeHTML(word)} ${count}</span>`).join("")
     : "<span>暂无明显情绪词</span>";
   const rate = actionTotal > 0 ? Math.round((doneTotal / actionTotal) * 100) : 0;
+  const qualityAvg = Math.round(qualityTotal / Math.max(1, entries.length));
   refs.analyticsActionRate.textContent = `${rate}%`;
-  refs.analyticsSummary.textContent = `共统计 ${entries.length} 局，识别出 ${topWords.length} 个高频牌面词。`;
+  refs.analyticsSessionQuality.textContent = `${qualityAvg}`;
+  refs.analyticsSummary.textContent = `共统计 ${entries.length} 局，识别出 ${topWords.length} 个高频牌面词，平均会话质量分 ${qualityAvg}。`;
 }
 
 function registerServiceWorker() {
