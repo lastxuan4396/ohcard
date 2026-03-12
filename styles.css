@@ -29,6 +29,10 @@ body {
   min-height: 100vh;
 }
 
+body.card-sort-active {
+  user-select: none;
+}
+
 .ambient {
   position: fixed;
   inset: 0;
@@ -824,6 +828,20 @@ select:focus {
   perspective: 900px;
 }
 
+.card-tile.is-sortable {
+  cursor: default;
+}
+
+.card-tile.is-sorting {
+  z-index: 12;
+  box-shadow: 0 20px 38px rgba(74, 49, 24, 0.22);
+  transition: none;
+}
+
+.card-tile.is-drop-target {
+  box-shadow: 0 0 0 3px rgba(46, 111, 103, 0.24) inset;
+}
+
 .card-tile.pair-card {
   min-height: clamp(700px, 74vh, 940px);
 }
@@ -919,6 +937,25 @@ select:focus {
   font-size: 11px;
   letter-spacing: 0.08em;
   color: rgba(42, 35, 28, 0.66);
+}
+
+.slot-label--draggable {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: grab;
+  user-select: none;
+  touch-action: none;
+}
+
+.slot-label--draggable::after {
+  content: "↕";
+  font-size: 12px;
+  opacity: 0.52;
+}
+
+.slot-label--draggable:active {
+  cursor: grabbing;
 }
 
 .card-title {

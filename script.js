@@ -361,7 +361,7 @@ const SLOT_TEMPLATE_STORAGE_KEY = "oh-card-slot-template-v1";
 const UI_PREF_STORAGE_KEY = "oh-card-ui-pref-v1";
 const CLOUD_SYNC_STORAGE_KEY = "oh-card-cloud-sync-v1";
 const SESSION_PROTOCOL_STORAGE_KEY = "oh-card-session-protocol-v1";
-const APP_ASSET_VERSION = "20260312-18";
+const APP_ASSET_VERSION = "20260312-19";
 const BUNDLED_IMAGE_DECK_PATH = `./data/oh-image-deck.json?rev=${APP_ASSET_VERSION}`;
 const BUNDLED_WORD_DECK_PATH = `./data/oh-word-deck.json?rev=${APP_ASSET_VERSION}`;
 
@@ -550,6 +550,7 @@ const state = {
   historyQuery: "",
   historyTag: "all",
   dragPanStates: new WeakMap(),
+  cardSortDrag: null,
   timer: {
     duration: 180,
     remaining: 180,
@@ -1759,7 +1760,7 @@ function runDraw() {
     refs.noteInput.value = "";
     prependHistory(session);
     setSummary(
-      `已完成「${mode.name} / ${DECK_TYPES[state.deckTypeId].name}」抽卡：${cards.map((card) => getCardShortName(card)).join(" / ")}`,
+      `已完成「${mode.name} / ${DECK_TYPES[state.deckTypeId].name}」抽卡。先描述看到的内容，再做联想与探究。`,
       false
     );
     renderActionPlan();
@@ -1830,6 +1831,7 @@ function renderSpread(cards, slotLabels) {
   cards.forEach((card, index) => {
     const tile = document.createElement("article");
     tile.className = `card-tile ${getCardKind(card)}-card`;
+    tile.dataset.cardIndex = String(index);
     tile.style.setProperty("--delay", `${index * 120}ms`);
 
     const back = document.createElement("div");
@@ -1842,6 +1844,10 @@ function renderSpread(cards, slotLabels) {
     front.className = `card-face card-front ${normalizeTone(card.tone)} ${getCardKind(card)}-front`;
 
     fillCardFront(front, card, slotLabels[index] || `位置 ${index + 1}`);
+    const sortHandle = front.querySelector(".slot-label");
+    if (sortHandle) {
+      bindCardSortHandle(tile, sortHandle, index);
+    }
 
     tile.append(back, front);
     refs.spreadBoard.appendChild(tile);
@@ -1861,10 +1867,6 @@ function fillCardFront(front, card, slotLabel) {
 
   if (getCardKind(card) === "pair") {
     front.classList.add("pair-front");
-
-    const pairTitle = document.createElement("h3");
-    pairTitle.className = "card-title";
-    pairTitle.textContent = `${card.imageCard.name} + ${card.wordCard.name}`;
 
     const pairViewport = document.createElement("div");
     pairViewport.className = "pair-viewport";
@@ -1936,19 +1938,11 @@ function fillCardFront(front, card, slotLabel) {
     updateCompositeSafeImageFit(pairComposite, image);
     scheduleRefreshViewportFits();
 
-    const line = document.createElement("p");
-    line.className = "card-line";
-    line.textContent = card.cue || "把图卡和字卡放在一起，说说它们共同指向了什么。";
-
-    front.append(pairTitle, pairInteractive, line);
+    front.append(pairInteractive);
     return;
   }
 
   if (getCardKind(card) === "image") {
-    const title = document.createElement("h3");
-    title.className = "card-title";
-    title.textContent = card.name;
-
     const imageBlock = document.createElement("div");
     imageBlock.className = "image-block";
     const image = document.createElement("img");
@@ -1959,22 +1953,9 @@ function fillCardFront(front, card, slotLabel) {
     makePreviewableImage(image, `${card.name}（图卡）`);
     imageBlock.appendChild(image);
 
-    const meta = document.createElement("p");
-    meta.className = "card-meta";
-    meta.textContent = `关键词：${(card.keywords || []).join(" · ")}`;
-
-    const line = document.createElement("p");
-    line.className = "card-line";
-    line.textContent = card.cue || "描述这个画面正在发生什么。";
-
-    front.append(title, imageBlock, meta, line);
+    front.append(imageBlock);
     return;
   }
-
-  const title = document.createElement("h3");
-  title.className = "card-title";
-  const glyph = card.glyph ? `${card.glyph} ` : "";
-  title.textContent = `${glyph}${card.name}`;
 
   if (card.image) {
     const wordImageBlock = document.createElement("div");
@@ -1987,23 +1968,16 @@ function fillCardFront(front, card, slotLabel) {
     makePreviewableImage(image, `${card.name}（字卡）`);
     wordImageBlock.appendChild(image);
 
-    const line = document.createElement("p");
-    line.className = "card-line";
-    line.textContent = card.cue || "说说这个词触发了你怎样的联想。";
-
-    front.append(title, wordImageBlock, line);
+    front.append(wordImageBlock);
     return;
   }
 
-  const meta = document.createElement("p");
-  meta.className = "card-meta";
-  meta.textContent = `关键词：${(card.keywords || []).join(" · ")}`;
+  const title = document.createElement("h3");
+  title.className = "card-title";
+  const glyph = card.glyph ? `${card.glyph} ` : "";
+  title.textContent = `${glyph}${card.name}`;
 
-  const line = document.createElement("p");
-  line.className = "card-line";
-  line.textContent = card.cue || "说说这个词触发了你怎样的联想。";
-
-  front.append(title, meta, line);
+  front.append(title);
 }
 
 function renderPrompts(slotLabels = null) {
@@ -2041,34 +2015,33 @@ function buildPrompts(layerId, cards, mode, slotLabels) {
 
   const cardPrompts = cards.map((card, index) => {
     const slot = slotLabels[index] || `位置 ${index + 1}`;
-    const cardName = getCardPromptName(card);
 
     if (layerId === "description") {
       if (getCardKind(card) === "pair") {
-        return `在「${slot}」里，图卡「${card.imageCard.name}」你先看见了什么？字卡「${card.wordCard.name}」又强化了什么？`;
+        return `在「${slot}」里，先分别描述图卡和字卡，不解释对错；你最先注意到的是什么？`;
       }
-      return `在「${slot}」这张「${cardName}」里，你最先注意到的是形状、动作还是关系？`;
+      return `在「${slot}」里，你最先注意到的是形状、动作还是关系？`;
     }
 
     if (layerId === "association") {
-      return `「${slot} - ${cardName}」让你想到最近哪个具体事件或人物？`;
+      return `「${slot}」让你想到最近哪个具体事件或人物？`;
     }
 
-    return `如果「${slot} - ${cardName}」是一条行动建议，你今天愿意做什么最小动作？`;
+    return `如果把「${slot}」看作一条行动提醒，你今天愿意做什么最小动作？`;
   });
 
   const relationPrompt =
     cards.length > 1
       ? layerId === "description"
-        ? `把这 ${cards.length} 张牌放在一起看，哪两张最像同一条故事线？`
-        : layerId === "association"
-        ? `这组牌最像你人生里哪个重复循环？它通常在什么情境出现？`
-        : "这组牌共同指向的核心冲突是什么？你准备如何改写它？"
-      : layerId === "description"
-      ? `请把「${getCardPromptName(cards[0])}」描述成一个场景：地点、人物、动作分别是什么？`
+      ? `把这 ${cards.length} 张牌放在一起看，哪两张最像同一条故事线？`
       : layerId === "association"
-      ? `这张「${getCardPromptName(cards[0])}」像你哪段记忆？那段记忆与你当前问题有什么联系？`
-      : `这张「${getCardPromptName(cards[0])}」触发了你什么感受？你需要被满足的核心需求是什么？`;
+      ? `这组牌最像你人生里哪个重复循环？它通常在什么情境出现？`
+      : "这组牌共同指向的核心冲突是什么？你准备如何改写它？"
+      : layerId === "description"
+      ? "请把这张牌描述成一个场景：地点、人物、动作分别是什么？"
+      : layerId === "association"
+      ? "这张牌像你哪段记忆？那段记忆与你当前问题有什么联系？"
+      : "这张牌触发了你什么感受？你需要被满足的核心需求是什么？";
 
   const dualPrompts = state.dualMode
     ? [
@@ -2095,6 +2068,7 @@ function syncCurrentSessionToHistory() {
   if (!state.currentSession) {
     return;
   }
+  state.currentSession.cards = state.currentCards.slice();
   state.currentSession.layerVisits = getLayerVisitArray();
   state.currentSession.closure = { ...state.closure };
   state.currentSession.protocol = {
@@ -2110,6 +2084,7 @@ function syncCurrentSessionToHistory() {
       ...entry,
       question: refs.questionInput.value.trim(),
       note: refs.noteInput.value.trim(),
+      cards: state.currentCards.slice(),
       modeId: state.modeId,
       deckTypeId: state.deckTypeId,
       layoutDirection: state.layoutDirection,
@@ -3600,7 +3575,7 @@ function openImagePreview(src, title, displaySrc = "") {
   hideImageFailureUi(refs.previewImage);
   upgradePreviewImageSource(refs.previewImage, src);
   refs.previewImage.alt = title || "卡牌放大预览";
-  refs.previewTitle.textContent = title || "";
+  refs.previewTitle.textContent = "";
   refs.imagePreviewModal.hidden = false;
   document.body.style.overflow = "hidden";
 }
@@ -3641,7 +3616,7 @@ function openPairPreview(imageSrc, wordSrc, title, quarter, sourceViewport = nul
   updatePreviewFitToggle();
   setCompositeGestureScale(refs.previewPairComposite, 1);
   setCompositePan(refs.previewPairComposite, 0, 0);
-  refs.previewTitle.textContent = title || "图卡 + 字卡";
+  refs.previewTitle.textContent = "";
   refs.imagePreviewModal.hidden = false;
   document.body.style.overflow = "hidden";
   requestAnimationFrame(() => {
@@ -3689,6 +3664,114 @@ function closeImagePreview() {
   setCompositePan(refs.previewPairComposite, 0, 0);
   refs.previewTitle.textContent = "";
   document.body.style.overflow = "";
+}
+
+function bindCardSortHandle(tile, handle, index) {
+  if (!tile || !handle || state.currentCards.length < 2 || state.readonlyMode) {
+    return;
+  }
+  tile.classList.add("is-sortable");
+  handle.classList.add("slot-label--draggable");
+  handle.title = "拖拽调整卡牌顺序";
+  handle.addEventListener("pointerdown", (event) => {
+    startCardSortDrag(event, tile, index);
+  });
+}
+
+function startCardSortDrag(event, tile, index) {
+  if (!tile || state.currentCards.length < 2) {
+    return;
+  }
+  if (event.button !== undefined && event.button !== 0) {
+    return;
+  }
+  const pointerId = event.pointerId;
+  const rect = tile.getBoundingClientRect();
+  state.cardSortDrag = {
+    pointerId,
+    sourceIndex: index,
+    targetIndex: index,
+    tile,
+    startCenterX: rect.left + rect.width / 2,
+    startCenterY: rect.top + rect.height / 2
+  };
+  tile.classList.add("is-sorting");
+  document.body.classList.add("card-sort-active");
+  event.currentTarget?.setPointerCapture?.(pointerId);
+  event.preventDefault();
+  document.addEventListener("pointermove", handleCardSortMove);
+  document.addEventListener("pointerup", handleCardSortEnd);
+  document.addEventListener("pointercancel", handleCardSortEnd);
+}
+
+function handleCardSortMove(event) {
+  const drag = state.cardSortDrag;
+  if (!drag || event.pointerId !== drag.pointerId || !drag.tile) {
+    return;
+  }
+  event.preventDefault();
+  const dx = event.clientX - drag.startCenterX;
+  const dy = event.clientY - drag.startCenterY;
+  drag.tile.style.transform = `translate(${dx}px, ${dy}px) rotate(1.5deg) scale(1.02)`;
+
+  document.querySelectorAll(".card-tile.is-drop-target").forEach((element) => {
+    element.classList.remove("is-drop-target");
+  });
+
+  const target = document.elementFromPoint(event.clientX, event.clientY)?.closest(".card-tile");
+  if (!target || target === drag.tile || !refs.spreadBoard.contains(target)) {
+    drag.targetIndex = drag.sourceIndex;
+    return;
+  }
+  target.classList.add("is-drop-target");
+  drag.targetIndex = Number(target.dataset.cardIndex || drag.sourceIndex);
+}
+
+function handleCardSortEnd(event) {
+  const drag = state.cardSortDrag;
+  if (!drag || event.pointerId !== drag.pointerId) {
+    return;
+  }
+  document.removeEventListener("pointermove", handleCardSortMove);
+  document.removeEventListener("pointerup", handleCardSortEnd);
+  document.removeEventListener("pointercancel", handleCardSortEnd);
+  document.body.classList.remove("card-sort-active");
+  document.querySelectorAll(".card-tile.is-drop-target").forEach((element) => {
+    element.classList.remove("is-drop-target");
+  });
+  if (drag.tile) {
+    drag.tile.classList.remove("is-sorting");
+    drag.tile.style.transform = "";
+  }
+  const fromIndex = drag.sourceIndex;
+  const toIndex = drag.targetIndex;
+  state.cardSortDrag = null;
+  if (!Number.isInteger(fromIndex) || !Number.isInteger(toIndex) || fromIndex === toIndex) {
+    return;
+  }
+  reorderCurrentCards(fromIndex, toIndex);
+}
+
+function reorderCurrentCards(fromIndex, toIndex) {
+  if (state.currentCards.length < 2) {
+    return;
+  }
+  const nextCards = state.currentCards.slice();
+  const [moved] = nextCards.splice(fromIndex, 1);
+  if (!moved) {
+    return;
+  }
+  nextCards.splice(toIndex, 0, moved);
+  state.currentCards = nextCards;
+  if (state.currentSession) {
+    state.currentSession.cards = nextCards.slice();
+  }
+  const slotLabels = getActiveSlotLabels(MODES[state.modeId]);
+  renderSpread(nextCards, slotLabels);
+  renderPrompts(slotLabels);
+  syncCurrentSessionToHistory();
+  persistCurrentSessionSnapshot();
+  setSummary("已调整卡牌顺序。", false);
 }
 
 function setCompositeGestureScale(element, scale) {
