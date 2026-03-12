@@ -106,7 +106,7 @@ body {
 
 .main-grid {
   display: grid;
-  grid-template-columns: 0.92fr 1.95fr 0.92fr;
+  grid-template-columns: 0.8fr 2.42fr 0.78fr;
   gap: 16px;
   align-items: start;
 }
@@ -802,16 +802,16 @@ select:focus {
 }
 
 .spread-board.cols-2 {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 520px), 1fr));
 }
 
 .spread-board.cols-3 {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 520px), 1fr));
 }
 
 .spread-board.cols-4,
 .spread-board.cols-5 {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 560px), 1fr));
 }
 
 .card-tile {
@@ -825,7 +825,7 @@ select:focus {
 }
 
 .card-tile.pair-card {
-  min-height: clamp(680px, 70vh, 920px);
+  min-height: clamp(700px, 74vh, 940px);
 }
 
 .card-tile.image-card {
@@ -863,6 +863,12 @@ select:focus {
   display: flex;
   flex-direction: column;
   gap: 9px;
+}
+
+.card-front.pair-front {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  gap: 10px;
 }
 
 .card-front.sand {
@@ -934,22 +940,22 @@ select:focus {
 
 .pair-viewport {
   width: 100%;
-  min-height: clamp(560px, 60vh, 780px);
+  min-height: clamp(620px, 68vh, 860px);
   border-radius: 14px;
   background: rgba(255, 255, 255, 0.6);
   border: 1px solid rgba(121, 97, 70, 0.2);
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: center;
   overflow: hidden;
-  padding: 14px 76px 14px 14px;
+  padding: 14px 58px 14px 14px;
   position: relative;
   touch-action: none;
   flex: 1;
 }
 
 .pair-composite {
-  width: min(100%, 560px);
+  width: min(100%, 760px);
   aspect-ratio: 1045 / 1312;
   position: relative;
   transition: transform 0.36s cubic-bezier(0.22, 1, 0.36, 1);
@@ -1041,27 +1047,29 @@ select:focus {
 
 .pair-interactive {
   position: relative;
+  min-height: 0;
+  display: flex;
 }
 
 .pair-rotate-controls {
   position: absolute;
-  right: 14px;
+  right: 6px;
   top: 50%;
   transform: translateY(-50%);
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 8px;
   z-index: 4;
 }
 
 .pair-rotate-btn {
-  width: 56px;
-  height: 56px;
+  width: 48px;
+  height: 48px;
   border-radius: 999px;
   border: 2px solid rgba(23, 111, 219, 0.8);
   background: rgba(255, 255, 255, 0.9);
   color: #5b4631;
-  font-size: 32px;
+  font-size: 28px;
   line-height: 1;
   cursor: pointer;
   box-shadow: 0 8px 14px rgba(57, 40, 23, 0.1);
@@ -1850,7 +1858,7 @@ body.immersive-mode .deck-zone {
 
 @media (min-width: 801px) and (max-width: 1200px) {
   .main-grid {
-    grid-template-columns: 0.95fr 1.25fr;
+    grid-template-columns: 0.82fr 1.54fr;
   }
 
   .draw-panel {
@@ -1862,7 +1870,7 @@ body.immersive-mode .deck-zone {
   }
 
   .pair-viewport {
-    min-height: clamp(520px, 60vh, 740px);
+    min-height: clamp(560px, 62vh, 760px);
   }
 }
 
@@ -1872,12 +1880,12 @@ body.immersive-mode .deck-zone {
   }
 
   .main-grid {
-    grid-template-columns: 0.8fr 2.45fr 0.9fr;
+    grid-template-columns: 0.74fr 2.72fr 0.78fr;
     gap: 18px;
   }
 
   .pair-viewport {
-    min-height: clamp(620px, 68vh, 900px);
+    min-height: clamp(680px, 72vh, 980px);
   }
 
   .spread-board {
@@ -1953,7 +1961,7 @@ body.immersive-mode .deck-zone {
 
   .pair-viewport {
     min-height: 520px;
-    padding: 10px 70px 10px 10px;
+    padding: 12px 58px 12px 12px;
   }
 
   .pair-interactive {
@@ -1961,9 +1969,9 @@ body.immersive-mode .deck-zone {
   }
 
   .pair-rotate-btn {
-    width: 48px;
-    height: 48px;
-    font-size: 24px;
+    width: 44px;
+    height: 44px;
+    font-size: 22px;
   }
 
   .preview-pair-tools {
@@ -2031,8 +2039,8 @@ body.immersive-mode .deck-zone {
   }
 
   .pair-viewport {
-    min-height: 460px;
-    padding: 8px 56px 8px 8px;
+    min-height: 480px;
+    padding: 10px 48px 10px 10px;
   }
 
   .pair-rotate-controls {
@@ -2041,8 +2049,8 @@ body.immersive-mode .deck-zone {
   }
 
   .pair-rotate-btn {
-    width: 38px;
-    height: 38px;
+    width: 36px;
+    height: 36px;
     font-size: 20px;
   }
 
