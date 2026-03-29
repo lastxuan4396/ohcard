@@ -361,7 +361,7 @@ const SLOT_TEMPLATE_STORAGE_KEY = "oh-card-slot-template-v1";
 const UI_PREF_STORAGE_KEY = "oh-card-ui-pref-v1";
 const CLOUD_SYNC_STORAGE_KEY = "oh-card-cloud-sync-v1";
 const SESSION_PROTOCOL_STORAGE_KEY = "oh-card-session-protocol-v1";
-const APP_ASSET_VERSION = "20260312-19";
+const APP_ASSET_VERSION = "20260329-20";
 const BUNDLED_IMAGE_DECK_PATH = `./data/oh-image-deck.json?rev=${APP_ASSET_VERSION}`;
 const BUNDLED_WORD_DECK_PATH = `./data/oh-word-deck.json?rev=${APP_ASSET_VERSION}`;
 
@@ -1826,6 +1826,9 @@ function renderSpread(cards, slotLabels) {
   refs.spreadBoard.className = "spread-board";
   const cols = Math.min(cards.length, 5);
   refs.spreadBoard.classList.add(`cols-${cols}`);
+  if (cards.some((card) => getCardKind(card) === "pair")) {
+    refs.spreadBoard.classList.add("has-pair-cards");
+  }
   refs.spreadBoard.innerHTML = "";
 
   cards.forEach((card, index) => {
