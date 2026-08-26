@@ -355,13 +355,15 @@ const DEFAULT_IMAGE_DECK = IMAGE_SCENE_POOL.map((scene) => normalizeImageCard({
 
 const STORAGE_KEY = "oh-card-lab-history-v1";
 const CUSTOM_DECK_STORAGE_KEY = "oh-card-custom-decks-v1";
+const CUSTOM_DECK_DB_NAME = "oh-card-decks-v1";
+const CUSTOM_DECK_DB_STORE = "decks";
 const OVERLAY_TUNE_STORAGE_KEY = "oh-card-overlay-tune-v1";
 const CURRENT_SESSION_STORAGE_KEY = "oh-card-current-session-v1";
 const SLOT_TEMPLATE_STORAGE_KEY = "oh-card-slot-template-v1";
 const UI_PREF_STORAGE_KEY = "oh-card-ui-pref-v1";
 const CLOUD_SYNC_STORAGE_KEY = "oh-card-cloud-sync-v1";
 const SESSION_PROTOCOL_STORAGE_KEY = "oh-card-session-protocol-v1";
-const APP_ASSET_VERSION = "20260329-20";
+const APP_ASSET_VERSION = "20260826-2";
 const BUNDLED_IMAGE_DECK_PATH = `./data/oh-image-deck.json?rev=${APP_ASSET_VERSION}`;
 const BUNDLED_WORD_DECK_PATH = `./data/oh-word-deck.json?rev=${APP_ASSET_VERSION}`;
 
@@ -562,8 +564,10 @@ const state = {
 
 init();
 
-function init() {
-  hydrateCustomDecks();
+// 初始化卡组、会话状态和页面交互。
+async function init() {
+  await hydrateCustomDecks();
+  restoreHistoryCardAssets();
   hydrateOverlayTune();
   hydrateUiPreference();
   hydrateCloudSyncInputs();
@@ -873,13 +877,14 @@ function bindEvents() {
   });
 }
 
+// 同步开场协议控件，并按协议和抽卡状态刷新按钮可用性。
 function renderSessionProtocol() {
   refs.sessionIntentInput.value = state.protocol.intent || "";
   refs.consentCheckbox.checked = Boolean(state.protocol.consent);
   refs.emotionIntensityInput.value = String(state.protocol.emotion || 3);
   refs.emotionIntensityValue.textContent = EMOTION_LABELS[state.protocol.emotion] || EMOTION_LABELS[3];
   refs.pauseProtocolBtn.textContent = state.protocol.paused ? "恢复模式" : "暂停模式";
-  refs.drawBtn.disabled = state.protocol.paused;
+  updateDrawButtonState();
 }
 
 function renderGroundingPanel() {
@@ -986,6 +991,7 @@ function setPromptStyle(styleId) {
   setSummary(`提问风格已切换为：${PROMPT_STYLES[styleId].name}`, false);
 }
 
+// 应用玩法预设，并结束与新配置不兼容的当前局面。
 function applySessionPreset(presetId) {
   if (state.readonlyMode) {
     setSummary("只读分享模式下不能切换预设。", true);
@@ -995,25 +1001,15 @@ function applySessionPreset(presetId) {
   if (!preset) {
     return;
   }
+  resetRoundForConfigurationChange(
+    "预设已切换，请重新抽卡开始新一局。",
+    "已切换玩法预设，请重新抽卡。"
+  );
   state.modeId = preset.modeId;
   state.deckTypeId = preset.deckTypeId;
   state.layoutDirection = preset.layoutDirection;
   state.layerId = "description";
-  resetLayerVisits();
   markLayerVisited("description");
-  state.facilitator.stageIndex = 0;
-
-  if (state.currentCards.length > 0) {
-    state.currentCards = [];
-    state.currentSession = null;
-    refs.spreadBoard.className = "spread-board empty";
-    refs.spreadBoard.innerHTML = '<p class="placeholder">预设已切换，请重新抽卡开始新一局。</p>';
-    refs.promptList.innerHTML = "";
-    const promptItem = document.createElement("li");
-    promptItem.textContent = "已切换玩法预设，请重新抽卡。";
-    refs.promptList.appendChild(promptItem);
-    renderActionPlan();
-  }
 
   renderModeSwitch();
   renderModeDetail();
@@ -1683,6 +1679,7 @@ function renderPlaybook() {
   });
 }
 
+// 校验抽卡条件并异步生成一局完整的牌面和会话记录。
 function runDraw() {
   if (state.readonlyMode) {
     setSummary("当前是只读分享模式，不能直接抽卡。请先退出只读模式。", true);
@@ -1710,11 +1707,11 @@ function runDraw() {
   resetLayerVisits();
   markLayerVisited("description");
   state.facilitator.stageIndex = 0;
-  const drawToken = Date.now();
+  const drawToken = state.drawVersion + 1;
   state.drawVersion = drawToken;
   state.isDrawing = true;
 
-  refs.drawBtn.disabled = true;
+  updateDrawButtonState();
   refs.deck.classList.remove("shuffling");
   void refs.deck.offsetWidth;
   refs.deck.classList.add("shuffling");
@@ -1723,57 +1720,94 @@ function runDraw() {
     if (state.drawVersion !== drawToken) {
       return;
     }
-    refs.deck.classList.remove("shuffling");
-    state.currentCards = cards;
-    state.layerId = "description";
-    renderPromptTabs();
-    renderSpread(cards, slotLabels);
-    renderPrompts(slotLabels);
+    try {
+      refs.deck.classList.remove("shuffling");
+      state.currentCards = cards;
+      state.layerId = "description";
+      renderPromptTabs();
+      renderSpread(cards, slotLabels);
+      renderPrompts(slotLabels);
 
-    const session = {
-      id: `${Date.now()}-${Math.random().toString(16).slice(2, 8)}`,
-      time: new Date().toISOString(),
-      modeId: state.modeId,
-      deckTypeId: state.deckTypeId,
-      layoutDirection: state.layoutDirection,
-      question: refs.questionInput.value.trim(),
-      cards,
-      slotLabels,
-      note: "",
-      dualMode: state.dualMode,
-      dualNotes: {
-        a: refs.dualNoteA.value.trim(),
-        b: refs.dualNoteB.value.trim()
-      },
-      lastExportAt: "",
-      actionPlan: normalizeActionPlan(buildActionPlan(cards, refs.questionInput.value.trim(), refs.noteInput.value.trim(), mode)),
-      tags: inferSessionTags(refs.questionInput.value.trim(), "", cards),
-      protocol: {
-        intent: state.protocol.intent || "",
-        consent: Boolean(state.protocol.consent),
-        emotion: Number(state.protocol.emotion || 3)
-      },
-      layerVisits: getLayerVisitArray()
-    };
+      const session = {
+        id: `${Date.now()}-${Math.random().toString(16).slice(2, 8)}`,
+        time: new Date().toISOString(),
+        modeId: state.modeId,
+        deckTypeId: state.deckTypeId,
+        layoutDirection: state.layoutDirection,
+        question: refs.questionInput.value.trim(),
+        cards,
+        slotLabels,
+        note: "",
+        dualMode: state.dualMode,
+        dualNotes: {
+          a: refs.dualNoteA.value.trim(),
+          b: refs.dualNoteB.value.trim()
+        },
+        lastExportAt: "",
+        actionPlan: normalizeActionPlan(buildActionPlan(cards, refs.questionInput.value.trim(), refs.noteInput.value.trim(), mode)),
+        tags: inferSessionTags(refs.questionInput.value.trim(), "", cards),
+        protocol: {
+          intent: state.protocol.intent || "",
+          consent: Boolean(state.protocol.consent),
+          emotion: Number(state.protocol.emotion || 3)
+        },
+        layerVisits: getLayerVisitArray()
+      };
 
-    state.currentSession = session;
-    refs.noteInput.value = "";
-    prependHistory(session);
-    setSummary(
-      `已完成「${mode.name} / ${DECK_TYPES[state.deckTypeId].name}」抽卡。先描述看到的内容，再做联想与探究。`,
-      false
-    );
-    renderActionPlan();
-    generateClosureIntegration(true);
-    renderWorkflowSteps();
-    persistCurrentSessionSnapshot();
-    renderAnalytics();
-    renderFacilitatorPanel();
-    preloadCards(cards);
-    preloadNextRoundCandidates(mode.count);
-    refs.drawBtn.disabled = false;
-    state.isDrawing = false;
+      state.currentSession = session;
+      refs.noteInput.value = "";
+      prependHistory(session);
+      setSummary(
+        `已完成「${mode.name} / ${DECK_TYPES[state.deckTypeId].name}」抽卡。先描述看到的内容，再做联想与探究。`,
+        false
+      );
+      renderActionPlan();
+      generateClosureIntegration(true);
+      renderWorkflowSteps();
+      persistCurrentSessionSnapshot();
+      renderAnalytics();
+      renderFacilitatorPanel();
+      preloadCards(cards);
+      preloadNextRoundCandidates(mode.count);
+    } catch (error) {
+      console.error("runDraw failed", error);
+      setSummary("抽卡时发生异常，请重试。", true);
+    } finally {
+      state.isDrawing = false;
+      refs.deck.classList.remove("shuffling");
+      updateDrawButtonState();
+    }
   }, 860);
+}
+
+// 根据当前页面状态统一更新抽卡按钮，避免多个流程相互覆盖禁用状态。
+function updateDrawButtonState() {
+  refs.drawBtn.disabled = Boolean(state.readonlyMode || state.protocol.paused || state.isDrawing);
+}
+
+// 取消尚未结束的抽卡动画，确保旧回调不能覆盖切换后的玩法状态。
+function cancelActiveDraw() {
+  state.drawVersion += 1;
+  state.isDrawing = false;
+  refs.deck.classList.remove("shuffling");
+  updateDrawButtonState();
+}
+
+// 清理当前牌面与会话，为新的玩法或卡组建立独立抽卡状态。
+function resetRoundForConfigurationChange(boardMessage, promptMessage) {
+  cancelActiveDraw();
+  state.currentCards = [];
+  state.currentSession = null;
+  state.closure = { summary: "", action: "", support: "" };
+  resetLayerVisits();
+  state.facilitator.stageIndex = 0;
+  refs.spreadBoard.className = "spread-board empty";
+  refs.spreadBoard.innerHTML = `<p class="placeholder">${boardMessage}</p>`;
+  refs.promptList.innerHTML = "";
+  const promptItem = document.createElement("li");
+  promptItem.textContent = promptMessage;
+  refs.promptList.appendChild(promptItem);
+  renderActionPlan();
 }
 
 function ensureDeckReady(count) {
@@ -2429,11 +2463,13 @@ function formatCardLineForReport(card, slot) {
   return `- ${slot}: 字卡「${card.name}」`;
 }
 
+// 取消当前抽卡并将牌面恢复为可开始新一局的状态。
 function resetBoard() {
   if (state.readonlyMode) {
     setSummary("只读分享模式下不能重置。", true);
     return;
   }
+  cancelActiveDraw();
   state.currentCards = [];
   state.currentSession = null;
   clearGroundingTimer();
@@ -2471,6 +2507,7 @@ function clearHistory() {
   setSummary("历史记录已清空。", false);
 }
 
+// 切换牌阵玩法，并为新玩法清理上一局的临时状态。
 function setMode(modeId) {
   if (state.readonlyMode) {
     setSummary("只读分享模式下不能切换玩法。", true);
@@ -2479,30 +2516,17 @@ function setMode(modeId) {
   if (!(modeId in MODES)) {
     return;
   }
+  if (modeId === state.modeId) {
+    return;
+  }
+  resetRoundForConfigurationChange(
+    "玩法已切换，请重新抽卡以匹配新的牌阵结构。",
+    "当前玩法结构已更新，请抽卡后再进行引导提问。"
+  );
   state.modeId = modeId;
   renderModeSwitch();
   renderModeDetail();
   renderSlotEditor();
-  if (state.currentCards.length > 0 && state.currentCards.length === MODES[modeId].count) {
-    const slotLabels = getModeLabels(modeId, MODES[modeId].count);
-    if (state.currentSession) {
-      state.currentSession.slotLabels = slotLabels.slice();
-    }
-    renderSpread(state.currentCards, slotLabels);
-    renderPrompts(slotLabels);
-  } else if (state.currentCards.length > 0) {
-    state.currentCards = [];
-    state.currentSession = null;
-    state.closure = { summary: "", action: "", support: "" };
-    resetLayerVisits();
-    refs.spreadBoard.className = "spread-board empty";
-    refs.spreadBoard.innerHTML = '<p class="placeholder">玩法已切换，请重新抽卡以匹配新的牌阵结构。</p>';
-    refs.promptList.innerHTML = "";
-    const promptItem = document.createElement("li");
-    promptItem.textContent = "当前玩法结构已更新，请抽卡后再进行引导提问。";
-    refs.promptList.appendChild(promptItem);
-    renderActionPlan();
-  }
   syncFacilitatorStageByLayer(state.layerId);
   renderFacilitatorPanel();
   renderClosurePanel();
@@ -2511,6 +2535,7 @@ function setMode(modeId) {
   setSummary(`已切换玩法：${MODES[modeId].name}`, false);
 }
 
+// 切换卡组类型，并清理与新卡组结构不兼容的当前局面。
 function setDeckType(deckTypeId) {
   if (state.readonlyMode) {
     setSummary("只读分享模式下不能切换卡组。", true);
@@ -2519,23 +2544,16 @@ function setDeckType(deckTypeId) {
   if (!(deckTypeId in DECK_TYPES)) {
     return;
   }
+  if (deckTypeId === state.deckTypeId) {
+    return;
+  }
+  resetRoundForConfigurationChange(
+    "卡组模式已切换，请重新抽卡。",
+    "卡组模式变化后需要重新抽卡，才能得到正确引导。"
+  );
   state.deckTypeId = deckTypeId;
   renderDeckTypeSwitch();
   renderModeSwitch();
-
-  if (state.currentCards.length > 0) {
-    state.currentCards = [];
-    state.currentSession = null;
-    state.closure = { summary: "", action: "", support: "" };
-    resetLayerVisits();
-    refs.spreadBoard.className = "spread-board empty";
-    refs.spreadBoard.innerHTML = '<p class="placeholder">卡组模式已切换，请重新抽卡。</p>';
-    refs.promptList.innerHTML = "";
-    const promptItem = document.createElement("li");
-    promptItem.textContent = "卡组模式变化后需要重新抽卡，才能得到正确引导。";
-    refs.promptList.appendChild(promptItem);
-    renderActionPlan();
-  }
 
   renderFacilitatorPanel();
   renderClosurePanel();
@@ -2711,7 +2729,7 @@ async function importDeckFromFile(file, type) {
       setSummary(`已导入图卡 ${parsed.length} 张。`, false);
     }
 
-    persistCustomDecks();
+    await persistCustomDecks();
     renderDeckStatus();
     renderWorkflowSteps();
     warmupPreload();
@@ -2876,7 +2894,7 @@ async function buildDeckFromImageFiles(files, targetType) {
     state.imageDeck = parsed;
     state.deckSource.image = "custom";
   }
-  persistCustomDecks();
+  await persistCustomDecks();
   renderDeckStatus();
   renderWorkflowSteps();
   warmupPreload();
@@ -2925,7 +2943,7 @@ function batchRenameCurrentDeck() {
     state.imageDeck = renamed;
     state.deckSource.image = "custom";
   }
-  persistCustomDecks();
+  void persistCustomDecks();
   renderDeckStatus();
   state.deckValidation = {
     summary: `已完成${target === "word" ? "字卡" : "图卡"}批量重命名，建议再次校验后抽卡。`,
@@ -2962,7 +2980,7 @@ async function fixCurrentDeckImageRatio() {
     state.imageDeck = fixed;
     state.deckSource.image = "custom";
   }
-  persistCustomDecks();
+  await persistCustomDecks();
   renderDeckStatus();
   warmupPreload();
   const raw = fixed.map((card) => ({ name: card.name, image: card.image }));
@@ -3030,41 +3048,48 @@ function resetDecksToBuiltIn() {
     summary: "已切回内置卡组。你也可以重新导入自定义卡包并查看校验结果。",
     items: []
   };
-  persistCustomDecks();
+  void persistCustomDecks();
   renderDeckStatus();
   renderDeckValidation();
   setSummary("已恢复内置图卡和字卡，正在尝试自动加载实卡素材。", false);
   autoLoadBundledDecks();
 }
 
-function hydrateCustomDecks() {
+async function hydrateCustomDecks() {
+  let localPayload = null;
   try {
     const raw = localStorage.getItem(CUSTOM_DECK_STORAGE_KEY);
     if (!raw) {
-      return;
-    }
-    const parsed = JSON.parse(raw);
-    if (!parsed || typeof parsed !== "object") {
-      return;
-    }
-
-    if (Array.isArray(parsed.wordDeck)) {
-      const wordDeck = parsed.wordDeck.map((entry) => normalizeWordCard(entry)).filter(Boolean);
-      if (wordDeck.length >= 5) {
-        state.wordDeck = wordDeck;
-        state.deckSource.word = "custom";
-      }
-    }
-
-    if (Array.isArray(parsed.imageDeck)) {
-      const imageDeck = parsed.imageDeck.map((entry) => normalizeImageCard(entry)).filter(Boolean);
-      if (imageDeck.length >= 5) {
-        state.imageDeck = imageDeck;
-        state.deckSource.image = "custom";
+      localPayload = null;
+    } else {
+      const parsed = JSON.parse(raw);
+      if (parsed && typeof parsed === "object") {
+        localPayload = parsed;
       }
     }
   } catch (error) {
     console.error("hydrate custom decks failed", error);
+  }
+  const payload = (await readCustomDecksFromIndexedDb()) || localPayload;
+  if (!payload || typeof payload !== "object") {
+    return;
+  }
+  if (Array.isArray(payload.wordDeck)) {
+    const wordDeck = payload.wordDeck.map((entry) => normalizeWordCard(entry)).filter(Boolean);
+    if (wordDeck.length >= 5) {
+      state.wordDeck = wordDeck;
+      state.deckSource.word = "custom";
+    }
+  }
+  if (Array.isArray(payload.imageDeck)) {
+    const imageDeck = payload.imageDeck.map((entry) => normalizeImageCard(entry)).filter(Boolean);
+    if (imageDeck.length >= 5) {
+      state.imageDeck = imageDeck;
+      state.deckSource.image = "custom";
+    }
+  }
+  if (payload === localPayload && (payload.imageDeck || payload.wordDeck)) {
+    void saveCustomDecksToIndexedDb(payload);
   }
 }
 
@@ -3119,14 +3144,77 @@ async function autoLoadBundledDecks() {
   }
 }
 
-function persistCustomDecks() {
-  localStorage.setItem(
-    CUSTOM_DECK_STORAGE_KEY,
-    JSON.stringify({
-      wordDeck: state.deckSource.word === "custom" ? state.wordDeck : null,
-      imageDeck: state.deckSource.image === "custom" ? state.imageDeck : null
-    })
-  );
+async function persistCustomDecks() {
+  const payload = {
+    wordDeck: state.deckSource.word === "custom" ? state.wordDeck : null,
+    imageDeck: state.deckSource.image === "custom" ? state.imageDeck : null
+  };
+  await saveCustomDecksToIndexedDb(payload);
+  try {
+    localStorage.removeItem(CUSTOM_DECK_STORAGE_KEY);
+  } catch (error) {
+    console.warn("persist custom decks failed", error);
+  }
+}
+
+// 打开用于保存本地图片卡组的 IndexedDB 数据库。
+function openCustomDeckDb() {
+  if (!("indexedDB" in window)) {
+    return Promise.resolve(null);
+  }
+  return new Promise((resolve, reject) => {
+    const request = window.indexedDB.open(CUSTOM_DECK_DB_NAME, 1);
+    request.onupgradeneeded = () => {
+      if (!request.result.objectStoreNames.contains(CUSTOM_DECK_DB_STORE)) {
+        request.result.createObjectStore(CUSTOM_DECK_DB_STORE);
+      }
+    };
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error || new Error("IndexedDB 打开失败"));
+  });
+}
+
+// 从 IndexedDB 读取本地图片卡组。
+async function readCustomDecksFromIndexedDb() {
+  try {
+    const db = await openCustomDeckDb();
+    if (!db) {
+      return null;
+    }
+    return await new Promise((resolve, reject) => {
+      const request = db.transaction(CUSTOM_DECK_DB_STORE, "readonly").objectStore(CUSTOM_DECK_DB_STORE).get("current");
+      request.onsuccess = () => resolve(request.result || null);
+      request.onerror = () => reject(request.error || new Error("IndexedDB 读取失败"));
+    });
+  } catch (error) {
+    console.warn("read custom decks from IndexedDB failed", error);
+    return null;
+  }
+}
+
+// 将本地图片卡组保存到 IndexedDB，并清理旧的 localStorage 大对象。
+async function saveCustomDecksToIndexedDb(payload) {
+  try {
+    const db = await openCustomDeckDb();
+    if (!db) {
+      localStorage.setItem(CUSTOM_DECK_STORAGE_KEY, JSON.stringify(payload));
+      return;
+    }
+    await new Promise((resolve, reject) => {
+      const transaction = db.transaction(CUSTOM_DECK_DB_STORE, "readwrite");
+      transaction.objectStore(CUSTOM_DECK_DB_STORE).put(payload, "current");
+      transaction.oncomplete = resolve;
+      transaction.onerror = () => reject(transaction.error || new Error("IndexedDB 写入失败"));
+    });
+    localStorage.removeItem(CUSTOM_DECK_STORAGE_KEY);
+  } catch (error) {
+    console.warn("save custom decks to IndexedDB failed", error);
+    try {
+      localStorage.setItem(CUSTOM_DECK_STORAGE_KEY, JSON.stringify(payload));
+    } catch (fallbackError) {
+      setSummary("卡组已加载，但浏览器本地空间不足；请压缩图片后再保存。", true);
+    }
+  }
 }
 
 function normalizeWordCard(input) {
@@ -5214,6 +5302,76 @@ function cloneCards(cards) {
   return cards.map((card) => ({ ...card, keywords: Array.isArray(card.keywords) ? card.keywords.slice() : [] }));
 }
 
+// 创建不携带图片数据的卡片副本，避免历史记录重复保存 Base64 图片。
+function compactCardForStorage(card) {
+  if (!card || typeof card !== "object") {
+    return card;
+  }
+  const compact = { ...card };
+  delete compact.image;
+  if (card.imageCard && typeof card.imageCard === "object") {
+    compact.imageCard = compactCardForStorage(card.imageCard);
+  }
+  if (card.wordCard && typeof card.wordCard === "object") {
+    compact.wordCard = compactCardForStorage(card.wordCard);
+  }
+  return compact;
+}
+
+// 批量转换牌面，供历史记录和当前会话快照持久化使用。
+function compactCardsForStorage(cards) {
+  if (!Array.isArray(cards)) {
+    return [];
+  }
+  return cards.map((card) => compactCardForStorage(card));
+}
+
+// 从当前卡组按卡片名称查找可恢复的图片资源。
+function findDeckCardByName(deck, name) {
+  if (!Array.isArray(deck) || !name) {
+    return null;
+  }
+  return deck.find((card) => card && card.name === name) || null;
+}
+
+// 将持久化的轻量牌面重新补回当前卡组中的图片资源。
+function restoreCardAssets(cards) {
+  if (!Array.isArray(cards)) {
+    return [];
+  }
+  return cards.map((card) => {
+    const kind = getCardKind(card);
+    if (kind === "pair") {
+      const imageCard = findDeckCardByName(state.imageDeck, card.imageCard?.name);
+      const wordCard = findDeckCardByName(state.wordDeck, card.wordCard?.name);
+      return {
+        ...card,
+        imageCard: { ...(card.imageCard || {}), ...(imageCard || {}), kind: "image" },
+        wordCard: { ...(card.wordCard || {}), ...(wordCard || {}), kind: "word" }
+      };
+    }
+    const deck = kind === "image" ? state.imageDeck : state.wordDeck;
+    const source = findDeckCardByName(deck, card.name);
+    return { ...card, ...(source || {}), kind: card.kind || kind };
+  });
+}
+
+// 启动时恢复旧历史的图片引用，并立即用轻量格式回写历史记录。
+function restoreHistoryCardAssets() {
+  if (!Array.isArray(state.history) || state.history.length === 0) {
+    return;
+  }
+  state.history = state.history.map((session) => ({
+    ...session,
+    cards: restoreCardAssets(session.cards)
+  }));
+  try {
+    persistHistory();
+  } catch (error) {
+    console.warn("compact history persistence failed", error);
+  }
+}
+
 function escapeHTML(value) {
   return String(value)
     .replaceAll("&", "&amp;")
@@ -5293,7 +5451,19 @@ function loadHistory() {
 }
 
 function persistHistory() {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(state.history));
+  const persistedHistory = (state.history || []).map((session) => ({
+    ...session,
+    cards: compactCardsForStorage(session.cards)
+  }));
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(persistedHistory));
+  } catch (error) {
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(persistedHistory.slice(0, 5)));
+    } catch (fallbackError) {
+      console.warn("persist history failed", fallbackError);
+    }
+  }
 }
 
 function loadCustomSlotLabels() {
@@ -5450,9 +5620,10 @@ function buildCurrentSessionSnapshot() {
       emotion: Number(state.protocol.emotion || 3),
       paused: Boolean(state.protocol.paused)
     },
-    currentCards: state.currentCards,
+    currentCards: compactCardsForStorage(state.currentCards),
     currentSession: {
       ...state.currentSession,
+      cards: compactCardsForStorage(state.currentSession.cards || state.currentCards),
       slotLabels: getActiveSlotLabels(MODES[state.modeId]),
       layerVisits: getLayerVisitArray(),
       closure: { ...state.closure },
@@ -5507,10 +5678,12 @@ function hydrateCurrentSessionSnapshot() {
         paused: Boolean(parsed.protocol.paused)
       };
     }
-    state.currentCards = parsed.currentCards;
+    const restoredCurrentCards = restoreCardAssets(parsed.currentCards);
+    state.currentCards = restoredCurrentCards;
     state.currentSession = parsed.currentSession && typeof parsed.currentSession === "object"
       ? {
           ...parsed.currentSession,
+          cards: restoreCardAssets(parsed.currentSession.cards || restoredCurrentCards),
           slotLabels: Array.isArray(parsed.currentSession.slotLabels) && parsed.currentSession.slotLabels.length
             ? parsed.currentSession.slotLabels
             : getModeLabels(state.modeId, MODES[state.modeId].count),
@@ -5591,7 +5764,7 @@ function buildSyncPayload() {
   return {
     version: 1,
     exportedAt: new Date().toISOString(),
-    history: state.history,
+    history: state.history.map((session) => ({ ...session, cards: compactCardsForStorage(session.cards) })),
     customDecks: {
       wordDeck: state.deckSource.word === "custom" ? state.wordDeck : null,
       imageDeck: state.deckSource.image === "custom" ? state.imageDeck : null
